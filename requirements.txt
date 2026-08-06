@@ -1,0 +1,7 @@
+playwright==1.49.1
+python-dotenv==1.0.1
+streamlit
+pandas
+numpy
+joblib
+scikit-learn
