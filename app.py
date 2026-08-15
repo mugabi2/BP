@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+import sys
+import traceback
 import warnings
+from dataclasses import replace
+from datetime import datetime
+from io import BytesIO
 from pathlib import Path
+from tempfile import gettempdir
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -31,7 +40,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 MODEL_PATH = PROJECT_ROOT / "models" / "btts_model.joblib"
 COLUMNS_PATH = PROJECT_ROOT / "models" / "btts_feature_columns.json"
 ODDS_PATH = PROJECT_ROOT / "odds" / "final_odds" / "final_odds.csv"
+PREDICTIONS_DIR = PROJECT_ROOT / "outputs"
+LIVE_PREDICTIONS_PATH = PREDICTIONS_DIR / "btts_predictions_live.csv"
 LIVE_RESULTS_DIR = PROJECT_ROOT / "data" / "live_seasons"
+LIVE_RESULTS_FILE_RE = re.compile(r"^season_(?P<season_id>\d+)_tgt_md(?P<target_matchday>\d+)_results\.csv$")
+STREAMLIT_BROWSER_PROFILE_DIR = Path(gettempdir()) / "btts-streamlit-browser-profile"
+TESSERACT_EXE_PATHS = [
+    Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
+    Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
+]
 
 DEFAULT_LIVE_GAP_MATCHDAYS = 2
 DEFAULT_PICK_THRESHOLD = 0.65
@@ -78,6 +95,29 @@ SEASON_FEATURE_COLUMNS = [
     "season_home_win_rate_so_far",
     "season_draw_rate_so_far",
     "season_away_win_rate_so_far",
+]
+LIVE_RESULTS_REQUIRED_FEATURES = [
+    "season_btts_rate_so_far",
+    "season_home_win_rate_so_far",
+    "season_away_win_rate_so_far",
+    "home_btts_rate_so_far",
+    "home_scored_rate_so_far",
+    "home_conceded_rate_so_far",
+    "away_btts_rate_so_far",
+    "away_scored_rate_so_far",
+    "away_conceded_rate_so_far",
+    "home_form_points_last_5",
+    "home_form_wins_last_5",
+    "home_form_draws_last_5",
+    "home_form_losses_last_5",
+    "away_form_points_last_5",
+    "away_form_wins_last_5",
+    "away_form_draws_last_5",
+    "away_form_losses_last_5",
+    "form_diff",
+    "btts_rate_diff",
+    "scored_rate_diff",
+    "conceded_rate_diff",
 ]
 OUTPUT_COLUMNS = [
     "season_id",
@@ -211,10 +251,102 @@ def parse_first_int(pattern: re.Pattern, text: str, group: str) -> int | None:
 
 def ocr_is_available() -> bool:
     try:
-        import pytesseract  # noqa: F401
+        import pytesseract
     except Exception:
         return False
+
+    configured_cmd = getattr(pytesseract.pytesseract, "tesseract_cmd", "")
+    if configured_cmd and Path(configured_cmd).exists():
+        return True
+    for exe_path in TESSERACT_EXE_PATHS:
+        if exe_path.exists():
+            pytesseract.pytesseract.tesseract_cmd = str(exe_path)
+            return True
     return False
+
+
+def extract_text_from_image_upload(upload) -> str:
+    if not ocr_is_available():
+        return ""
+    try:
+        from PIL import Image
+        import pytesseract
+    except Exception:
+        return ""
+
+    image = Image.open(BytesIO(upload.getvalue()))
+    return pytesseract.image_to_string(image)
+
+
+def extract_text_from_image_bytes(image_bytes: bytes) -> str:
+    if not ocr_is_available():
+        return ""
+    try:
+        from PIL import Image
+        import pytesseract
+    except Exception:
+        return ""
+
+    image = Image.open(BytesIO(image_bytes))
+    return pytesseract.image_to_string(image)
+
+
+def read_clipboard_image_png() -> tuple[bytes | None, str]:
+    try:
+        from PIL import Image, ImageGrab
+    except Exception as exc:
+        return None, f"Clipboard image support is unavailable: {exc}"
+
+    clipboard = ImageGrab.grabclipboard()
+    image = None
+    if isinstance(clipboard, Image.Image):
+        image = clipboard
+    elif isinstance(clipboard, list) and clipboard:
+        for item in clipboard:
+            try:
+                image = Image.open(item)
+                break
+            except Exception:
+                continue
+
+    if image is None:
+        return None, "No image found on the Windows clipboard. Copy a screenshot first, then click this button."
+
+    buffer = BytesIO()
+    image.convert("RGB").save(buffer, format="PNG")
+    return buffer.getvalue(), ""
+
+
+def clean_ocr_odd(value: str) -> float | None:
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        if "." in value:
+            return float(value)
+        if len(value) == 3:
+            return float(value) / 100
+        return float(value)
+    except ValueError:
+        return None
+
+
+def extract_1x2_odds(text: str) -> tuple[float | None, float | None, float | None]:
+    normalized = re.sub(r"[^\w.\s]", " ", text.upper())
+    normalized = re.sub(r"\s+", " ", normalized)
+    match = re.search(
+        r"\b1\s+(?P<home>\d+(?:\.\d+)?|\d{3})\s+X\s+"
+        r"(?P<draw>\d+(?:\.\d+)?|\d{3})\s+2\s+"
+        r"(?P<away>\d+(?:\.\d+)?|\d{3})\b",
+        normalized,
+    )
+    if not match:
+        return None, None, None
+    return (
+        clean_ocr_odd(match.group("home")),
+        clean_ocr_odd(match.group("draw")),
+        clean_ocr_odd(match.group("away")),
+    )
 
 
 def parse_fixtures_and_odds(text: str, target_matchday: int) -> pd.DataFrame:
@@ -227,10 +359,10 @@ def parse_fixtures_and_odds(text: str, target_matchday: int) -> pd.DataFrame:
         home = fixture_match.group("home")
         away = fixture_match.group("away")
         nearby = " ".join(lines[index : min(index + 5, len(lines))])
-        decimals = [float(value) for value in re.findall(r"\b\d+(?:\.\d{1,3})\b", nearby)]
         row = {"matchday": int(target_matchday), "home_team": home, "away_team": away}
-        if len(decimals) >= 3:
-            row.update({"odds_1": decimals[0], "odds_x": decimals[1], "odds_2": decimals[2]})
+        odds_1, odds_x, odds_2 = extract_1x2_odds(nearby)
+        if all(value is not None for value in [odds_1, odds_x, odds_2]):
+            row.update({"odds_1": odds_1, "odds_x": odds_x, "odds_2": odds_2})
         rows.append(row)
 
     if not rows:
@@ -504,6 +636,28 @@ def find_live_results_file(season_id: str, target_matchday: int) -> Path | None:
     return candidates[-1] if candidates else None
 
 
+def find_exact_live_results_file(season_id: str, target_matchday: int) -> Path | None:
+    exact = LIVE_RESULTS_DIR / f"season_{season_id}_tgt_md{target_matchday}_results.csv"
+    return exact if exact.exists() else None
+
+
+def session_live_results_file(season_id: str, target_matchday: int) -> Path | None:
+    raw_path = st.session_state.get("live_results_path")
+    if not raw_path:
+        return None
+    path = Path(raw_path)
+    if not path.is_file():
+        return None
+    match = LIVE_RESULTS_FILE_RE.match(path.name)
+    if (
+        match
+        and match.group("season_id") == str(season_id)
+        and int(match.group("target_matchday")) == int(target_matchday)
+    ):
+        return path
+    return None
+
+
 def selected_odds_for_matchday(odds: pd.DataFrame, target_matchday: int) -> pd.DataFrame:
     rows = odds[odds["matchday"] == int(target_matchday)].copy()
     if rows.empty:
@@ -548,27 +702,597 @@ def format_predictions(predictions: pd.DataFrame) -> pd.io.formats.style.Styler:
     )
 
 
-def show_capture_result(result) -> None:
-    st.session_state["live_results_path"] = str(result.output_path)
-    st.success("Live results updated.")
-    st.write(
-        {
-            "season_id": result.season_id,
-            "target_matchday": result.target_matchday,
-            "cutoff_matchday": result.feature_cutoff_matchday,
-            "reused_matchdays": result.reused_matchdays,
-            "fetched_matchdays": result.fetched_matchdays,
-            "rows_written": result.rows_written,
-            "output_path": str(result.output_path),
-        }
+def save_predictions_live_file(predictions: pd.DataFrame) -> Path:
+    PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    rows = predictions.copy()
+    rows.insert(0, "prediction_timestamp", datetime.now().astimezone().isoformat(timespec="seconds"))
+    write_header = not LIVE_PREDICTIONS_PATH.exists()
+    rows.to_csv(LIVE_PREDICTIONS_PATH, mode="a", header=write_header, index=False)
+    try:
+        load_saved_predictions.clear()
+    except Exception:
+        pass
+    return LIVE_PREDICTIONS_PATH
+
+
+@st.cache_data
+def load_saved_predictions(predictions_dir_text: str) -> pd.DataFrame:
+    predictions_dir = Path(predictions_dir_text)
+    live_file = predictions_dir / LIVE_PREDICTIONS_PATH.name
+    files = [live_file] if live_file.exists() else []
+    frames = []
+    required = {"season_id", "target_matchday", "home_team", "away_team", "prediction"}
+
+    for path in files:
+        df = pd.read_csv(path)
+        df.columns = [c.strip() for c in df.columns]
+        missing = sorted(required - set(df.columns))
+        if missing:
+            raise ValueError(f"{path.name} is missing required columns: {', '.join(missing)}")
+        df["prediction_file"] = path.name
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame(columns=sorted(required) + ["prediction_file", "prediction_timestamp"])
+
+    predictions = pd.concat(frames, ignore_index=True)
+    predictions["season_id"] = predictions["season_id"].astype(str)
+    predictions["target_matchday"] = pd.to_numeric(predictions["target_matchday"], errors="coerce")
+    predictions["home_team"] = clean_team_series(predictions["home_team"])
+    predictions["away_team"] = clean_team_series(predictions["away_team"])
+    predictions["prediction"] = clean_team_series(predictions["prediction"]).map({"YES": "Yes", "NO": "No"}).fillna(
+        predictions["prediction"]
     )
+    if "decision" not in predictions.columns:
+        predictions["decision"] = "Pick"
+    predictions["decision"] = predictions["decision"].fillna("Pick")
+    if "prediction_timestamp" not in predictions.columns:
+        predictions["prediction_timestamp"] = ""
+
+    for col in ["btts_yes_probability", "confidence"]:
+        if col not in predictions.columns:
+            predictions[col] = np.nan
+        predictions[col] = pd.to_numeric(predictions[col], errors="coerce")
+
+    predictions = predictions.dropna(subset=["target_matchday", "home_team", "away_team"])
+    predictions["target_matchday"] = predictions["target_matchday"].astype(int)
+    predictions = predictions.drop_duplicates(
+        ["season_id", "target_matchday", "home_team", "away_team"],
+        keep="last",
+    )
+    return predictions.reset_index(drop=True)
+
+
+@st.cache_data
+def load_live_season_actuals(live_results_dir_text: str) -> pd.DataFrame:
+    live_results_dir = Path(live_results_dir_text)
+    files = sorted(live_results_dir.glob("season_*_tgt_md*_results.csv"))
+    frames = []
+
+    for path in files:
+        match = LIVE_RESULTS_FILE_RE.match(path.name)
+        if not match:
+            continue
+        df = load_results_csv(str(path))
+        df["actuals_file"] = path.name
+        df["actuals_source_target_matchday"] = int(match.group("target_matchday"))
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame(
+            columns=[
+                "season_id",
+                "matchday",
+                "home_team",
+                "away_team",
+                "fulltime_home_goals",
+                "fulltime_away_goals",
+                "target_btts",
+                "actuals_file",
+                "actuals_source_target_matchday",
+            ]
+        )
+
+    actuals = pd.concat(frames, ignore_index=True)
+    actuals = actuals.sort_values(["season_id", "matchday", "actuals_source_target_matchday"])
+    actuals = actuals.drop_duplicates(["season_id", "matchday", "home_team", "away_team"], keep="last")
+    return actuals.reset_index(drop=True)
+
+
+def evaluate_predictions(predictions: pd.DataFrame, actuals: pd.DataFrame) -> pd.DataFrame:
+    if predictions.empty:
+        return pd.DataFrame()
+
+    result_cols = [
+        "season_id",
+        "matchday",
+        "home_team",
+        "away_team",
+        "fulltime_home_goals",
+        "fulltime_away_goals",
+        "target_btts",
+    ]
+    optional_result_cols = ["actuals_file", "actuals_source_target_matchday"]
+    result_cols += [col for col in optional_result_cols if col in actuals.columns]
+    actuals_for_join = actuals[result_cols].rename(columns={"matchday": "target_matchday"})
+    evaluated = predictions.merge(
+        actuals_for_join,
+        on=["season_id", "target_matchday", "home_team", "away_team"],
+        how="left",
+        validate="many_to_one",
+    )
+    evaluated["actual"] = np.where(evaluated["target_btts"] == 1, "Yes", "No")
+    evaluated.loc[evaluated["target_btts"].isna(), "actual"] = np.nan
+    evaluated["correct"] = evaluated["prediction"].eq(evaluated["actual"]).astype("object")
+    evaluated.loc[evaluated["actual"].isna(), "correct"] = np.nan
+    evaluated["picked"] = evaluated["decision"].astype(str).str.lower().eq("pick")
+    return evaluated.sort_values(
+        ["target_matchday", "decision", "confidence"],
+        ascending=[True, True, False],
+    ).reset_index(drop=True)
+
+
+def _pct(value: float) -> str:
+    if pd.isna(value):
+        return "-"
+    return f"{value:.1%}"
+
+
+def summarize_evaluation(evaluated: pd.DataFrame, group_cols: list[str]) -> pd.DataFrame:
+    completed = evaluated[evaluated["actual"].notna()].copy()
+    if completed.empty:
+        return pd.DataFrame()
+
+    rows = []
+    grouped = completed.groupby(group_cols, dropna=False) if group_cols else [((), completed)]
+    for keys, group in grouped:
+        if not isinstance(keys, tuple):
+            keys = (keys,)
+        picked = group[group["picked"]]
+        correct = int(group["correct"].eq(True).sum())
+        missed = int(group["correct"].eq(False).sum())
+        pick_correct = int(picked["correct"].eq(True).sum()) if not picked.empty else 0
+        pick_missed = int(picked["correct"].eq(False).sum()) if not picked.empty else 0
+        row = {col: key for col, key in zip(group_cols, keys)}
+        row.update(
+            {
+                "predictions": len(group),
+                "correct": correct,
+                "missed": missed,
+                "accuracy": correct / len(group) if len(group) else np.nan,
+                "picks": len(picked),
+                "pick_correct": pick_correct,
+                "pick_missed": pick_missed,
+                "pick_accuracy": pick_correct / len(picked) if not picked.empty else np.nan,
+                "avg_confidence": group["confidence"].mean(),
+            }
+        )
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
+def format_summary_table(summary: pd.DataFrame) -> pd.DataFrame:
+    table = summary.copy()
+    for col in ["accuracy", "pick_accuracy", "avg_confidence"]:
+        if col in table.columns:
+            table[col] = table[col].map(_pct)
+    return table
+
+
+def chart_percent_table(summary: pd.DataFrame, label_col: str, value_cols: list[str]) -> pd.DataFrame:
+    if summary.empty:
+        return pd.DataFrame()
+    chart = summary[[label_col] + value_cols].copy()
+    chart[label_col] = chart[label_col].astype(str)
+    for col in value_cols:
+        chart[col] = chart[col] * 100
+    return chart.set_index(label_col)
+
+
+def confidence_bucket_summary(evaluated: pd.DataFrame) -> pd.DataFrame:
+    completed = evaluated[evaluated["actual"].notna() & evaluated["confidence"].notna()].copy()
+    if completed.empty:
+        return pd.DataFrame()
+    completed["confidence_bucket"] = pd.cut(
+        completed["confidence"],
+        bins=[0, 0.5, 0.55, 0.6, 0.65, 0.7, 0.8, 0.9, 1.0],
+        labels=["<=50", "50-55", "55-60", "60-65", "65-70", "70-80", "80-90", "90-100"],
+        include_lowest=True,
+    )
+    return summarize_evaluation(completed, ["confidence_bucket"])
+
+
+def show_evaluation_visuals(evaluated: pd.DataFrame, by_matchday: pd.DataFrame, by_side: pd.DataFrame) -> None:
+    completed = evaluated[evaluated["actual"].notna()].copy()
+    if completed.empty:
+        st.info("No completed predictions yet, so the charts will appear after matching actual results are saved.")
+        return
+
+    left, right = st.columns(2)
+    with left:
+        st.markdown("#### Accuracy trend")
+        trend = chart_percent_table(by_matchday, "target_matchday", ["accuracy", "pick_accuracy"])
+        st.line_chart(trend)
+    with right:
+        st.markdown("#### Correct vs missed")
+        counts = by_matchday[["target_matchday", "correct", "missed"]].copy()
+        counts["target_matchday"] = counts["target_matchday"].astype(str)
+        st.bar_chart(counts.set_index("target_matchday"))
+
+    left, right = st.columns(2)
+    with left:
+        st.markdown("#### BTTS Yes vs No")
+        side_chart = chart_percent_table(by_side, "prediction", ["accuracy", "pick_accuracy"])
+        st.bar_chart(side_chart)
+    with right:
+        st.markdown("#### Confidence buckets")
+        buckets = confidence_bucket_summary(evaluated)
+        if buckets.empty:
+            st.caption("No confidence values available yet.")
+        else:
+            bucket_chart = chart_percent_table(buckets, "confidence_bucket", ["accuracy", "pick_accuracy"])
+            st.bar_chart(bucket_chart)
+
+
+def show_evaluation_page() -> None:
+    st.subheader("Prediction Evaluation")
+    st.caption(
+        "Compares saved predictions in outputs with completed actual results from data/live_seasons. "
+        "This measures model understanding, not betting ROI."
+    )
+
+    include_skips = st.checkbox("Show skipped rows in detail table", value=True)
+
+    try:
+        predictions = load_saved_predictions(str(PREDICTIONS_DIR))
+    except Exception as exc:
+        st.error(f"Could not load saved predictions: {exc}")
+        return
+
+    if predictions.empty:
+        st.warning(f"No saved prediction files found in {PREDICTIONS_DIR}.")
+        return
+
+    try:
+        actuals = load_live_season_actuals(str(LIVE_RESULTS_DIR))
+        evaluated = evaluate_predictions(predictions, actuals)
+    except Exception as exc:
+        st.error(f"Could not evaluate predictions: {exc}")
+        return
+
+    completed = evaluated[evaluated["actual"].notna()]
+    pending = evaluated[evaluated["actual"].isna()]
+    picked = completed[completed["picked"]]
+    overall_accuracy = completed["correct"].eq(True).mean() if not completed.empty else np.nan
+    pick_accuracy = picked["correct"].eq(True).mean() if not picked.empty else np.nan
+
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Saved predictions", len(predictions))
+    metric_cols[1].metric("Completed", len(completed))
+    metric_cols[2].metric("Overall accuracy", _pct(overall_accuracy))
+    metric_cols[3].metric("Pick accuracy", _pct(pick_accuracy))
+    metric_cols[4].metric("Pending", len(pending))
+
+    by_side = summarize_evaluation(evaluated, ["prediction"])
+    if not by_side.empty:
+        by_side = by_side.sort_values("prediction")
+    if not by_side.empty:
+        best = by_side.sort_values(["pick_accuracy", "accuracy"], ascending=False).iloc[0]
+        st.info(
+            f"Current stronger side: BTTS {best['prediction']} "
+            f"(pick accuracy {_pct(best['pick_accuracy'])}, all accuracy {_pct(best['accuracy'])})."
+        )
+
+    by_matchday = summarize_evaluation(evaluated, ["target_matchday"])
+    if not by_matchday.empty:
+        by_matchday = by_matchday.sort_values("target_matchday")
+
+    tabs = st.tabs(["Visuals", "By matchday", "Yes vs No", "Details", "Suggestions"])
+    with tabs[0]:
+        show_evaluation_visuals(evaluated, by_matchday, by_side)
+    with tabs[1]:
+        st.dataframe(format_summary_table(by_matchday), use_container_width=True, hide_index=True)
+    with tabs[2]:
+        st.dataframe(format_summary_table(by_side), use_container_width=True, hide_index=True)
+        by_matchday_side = summarize_evaluation(evaluated, ["target_matchday", "prediction"])
+        if not by_matchday_side.empty:
+            by_matchday_side = by_matchday_side.sort_values(["target_matchday", "prediction"])
+        st.dataframe(format_summary_table(by_matchday_side), use_container_width=True, hide_index=True)
+    with tabs[3]:
+        detail = evaluated.copy() if include_skips else evaluated[evaluated["picked"]].copy()
+        detail["score"] = np.where(
+            detail["actual"].notna(),
+            detail["fulltime_home_goals"].astype("Int64").astype(str)
+            + "-"
+            + detail["fulltime_away_goals"].astype("Int64").astype(str),
+            "",
+        )
+        detail_cols = [
+            "prediction_timestamp",
+            "prediction_file",
+            "season_id",
+            "target_matchday",
+            "home_team",
+            "away_team",
+            "prediction",
+            "actual",
+            "score",
+            "decision",
+            "confidence",
+            "correct",
+            "actuals_file",
+        ]
+        detail_cols = [col for col in detail_cols if col in detail.columns]
+        st.dataframe(detail[detail_cols], use_container_width=True, hide_index=True)
+        st.download_button(
+            "Download evaluation CSV",
+            data=evaluated.to_csv(index=False).encode("utf-8"),
+            file_name="btts_prediction_evaluation.csv",
+            mime="text/csv",
+        )
+    with tabs[4]:
+        st.markdown(
+            """
+            - Track BTTS Yes and BTTS No separately. A model can have good total accuracy while losing money on one side.
+            - Treat wrong Picks as losses for now. True money ROI needs odds and stake history, but this view tells you whether the model logic is improving.
+            - Keep Skip rows in the evaluation. If Skips are often correct, the threshold may be too strict; if Picks miss while Skips hit, the confidence calibration needs work.
+            - Review by matchday. If late matchdays perform worse, train or calibrate the model with matchday-stage features.
+            - Use the confidence bucket chart to see whether higher confidence really means higher accuracy.
+            - Save every prediction before results are known. Evaluation is only honest when the prediction timestamp is before the match outcome.
+            """
+        )
+
+
+def model_input_table(live_df: pd.DataFrame, feature_columns: list[str]) -> pd.DataFrame:
+    table = live_df.copy()
+    for col in feature_columns:
+        if col not in table.columns:
+            table[col] = np.nan
+    return table[TRACKING_COLUMNS + feature_columns]
+
+
+def show_manual_input_verification(
+    live_df: pd.DataFrame,
+    feature_columns: list[str],
+    standings: pd.DataFrame,
+    fixture_odds: pd.DataFrame,
+    feature_source: str,
+    show_details: bool = False,
+) -> None:
+    missing = missing_feature_table(live_df, feature_columns)
+    feature_table = model_input_table(live_df, feature_columns)
+
+    st.caption(
+        f"Ready: {len(fixture_odds)} fixtures, {len(standings)} standings teams, "
+        f"{len(feature_columns)} model features. Source: {feature_source}"
+    )
+
+    if not show_details:
+        return
+
+    tabs = st.tabs(["Fixtures", "Standings", "Model input", "Missing fields"])
+    with tabs[0]:
+        st.dataframe(
+            fixture_odds[["matchday", "home_team", "away_team"]],
+            use_container_width=True,
+            hide_index=True,
+        )
+    with tabs[1]:
+        st.dataframe(standings, use_container_width=True, hide_index=True)
+    with tabs[2]:
+        st.caption("These are the exact feature columns passed to the saved model.")
+        st.dataframe(feature_table, use_container_width=True, hide_index=True)
+    with tabs[3]:
+        if missing.empty:
+            st.success("All saved model features have values.")
+        else:
+            st.warning("Rows shown here will be handled by the saved model pipeline/imputer.")
+            st.dataframe(missing, use_container_width=True, hide_index=True)
+
+
+def show_capture_result(result, show_details: bool = False) -> None:
+    st.session_state["live_results_path"] = str(result.output_path)
+    st.success(f"Live results updated: {result.rows_written} rows written.")
+    if show_details:
+        st.write(
+            {
+                "season_id": result.season_id,
+                "target_matchday": result.target_matchday,
+                "cutoff_matchday": result.feature_cutoff_matchday,
+                "reused_matchdays": result.reused_matchdays,
+                "fetched_matchdays": result.fetched_matchdays,
+                "rows_written": result.rows_written,
+                "output_path": str(result.output_path),
+            }
+        )
     if result.incomplete_matchdays:
         st.warning(f"Incomplete matchdays remain: {result.incomplete_matchdays}")
 
 
+def refresh_odds_after_live_update(show_details: bool = False) -> pd.DataFrame:
+    if not load_settings or not collect_current_odds:
+        raise RuntimeError(f"Odds collector is not importable. {COLLECTOR_IMPORT_ERROR}")
+    result = run_odds_capture_command()
+    load_odds.clear()
+    odds_df = load_odds(str(ODDS_PATH))
+    st.success(f"Odds refreshed: {result.rows} rows.")
+    if show_details:
+        st.write(
+            {
+                "odds_rows": result.rows,
+                "markets_seen": result.markets_seen,
+                "final_path": str(result.final_path) if result.final_path else str(ODDS_PATH),
+            }
+        )
+    return odds_df
+
+
+def show_exception(label: str, exc: BaseException) -> None:
+    message = str(exc).strip() or repr(exc)
+    if "ProcessSingleton" in message or "Lock file can not be created" in message:
+        message = (
+            f"{message}\n\nThe collector browser profile is already in use. "
+            "Close any old collector Chrome window, then try again."
+        )
+    st.error(f"{label}: {type(exc).__name__}: {message}")
+    with st.expander("Error details", expanded=False):
+        st.code("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+
+
+def load_streamlit_collector_settings():
+    settings = load_settings()
+    STREAMLIT_BROWSER_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    return replace(settings, user_data_dir=STREAMLIT_BROWSER_PROFILE_DIR)
+
+
+def run_live_results_capture_command(season_id: str, target_matchday: int, live_gap_matchdays: int):
+    env = os.environ.copy()
+    env["USER_DATA_DIR"] = str(STREAMLIT_BROWSER_PROFILE_DIR)
+    STREAMLIT_BROWSER_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "collect_live_results.py"),
+        "--season-id",
+        str(season_id),
+        "--target-matchday",
+        str(target_matchday),
+        "--live-gap-matchdays",
+        str(live_gap_matchdays),
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=300,
+    )
+    output = "\n".join(part for part in [completed.stdout, completed.stderr] if part.strip())
+    if completed.returncode != 0:
+        raise RuntimeError(output.strip() or f"collect_live_results.py exited with code {completed.returncode}")
+
+    summary = parse_live_capture_output(output)
+    output_path = LIVE_RESULTS_DIR / f"season_{season_id}_tgt_md{target_matchday}_results.csv"
+
+    return SimpleNamespace(
+        season_id=str(summary.get("season") or season_id),
+        target_matchday=int(summary.get("target_md") or target_matchday),
+        feature_cutoff_matchday=int(summary.get("cutoff_md") or (target_matchday - live_gap_matchdays)),
+        output_path=output_path,
+        previous_path=None,
+        reused_matchdays=parse_int_list(summary.get("reused", "")),
+        fetched_matchdays=parse_int_list(summary.get("fetched", "")),
+        incomplete_matchdays={},
+        rows_written=int(summary.get("rows") or 0),
+        raw_output=output,
+    )
+
+
+def run_odds_capture_command():
+    env = os.environ.copy()
+    env["USER_DATA_DIR"] = str(STREAMLIT_BROWSER_PROFILE_DIR)
+    STREAMLIT_BROWSER_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "collect_odds.py"),
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=300,
+    )
+    output = "\n".join(part for part in [completed.stdout, completed.stderr] if part.strip())
+    if completed.returncode != 0:
+        raise RuntimeError(output.strip() or f"collect_odds.py exited with code {completed.returncode}")
+
+    summary = parse_odds_capture_output(output)
+    return SimpleNamespace(
+        rows=int(summary.get("rows") or 0),
+        markets_seen=parse_text_list(summary.get("markets", "")),
+        final_path=ODDS_PATH,
+        raw_output=output,
+    )
+
+
+def parse_odds_capture_output(output: str) -> dict[str, str]:
+    done_line = ""
+    for line in output.splitlines():
+        if "Done. rows=" in line:
+            done_line = line
+    if not done_line:
+        return {}
+    return dict(re.findall(r"(\w+)=([^\s]+)", done_line))
+
+
+def parse_text_list(value: str) -> list[str]:
+    if not value or value == "-":
+        return []
+    return [part for part in value.split(",") if part]
+
+
+def parse_live_capture_output(output: str) -> dict[str, str]:
+    done_line = ""
+    for line in output.splitlines():
+        if "Done. season=" in line:
+            done_line = line
+    if not done_line:
+        return {}
+
+    pairs = re.findall(r"(\w+)=([^\s]+)", done_line)
+    return dict(pairs)
+
+
+def parse_int_list(value: str) -> list[int]:
+    if not value or value == "-":
+        return []
+    return [int(part) for part in value.split(",") if part.strip().isdigit()]
+
+
+def apply_compact_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        .block-container { padding-top: 1.2rem; padding-bottom: 1rem; }
+        h1 { font-size: 1.6rem !important; margin-bottom: 0.25rem !important; }
+        h2 { font-size: 1.15rem !important; margin-top: 0.7rem !important; }
+        h3 { font-size: 1rem !important; margin-top: 0.5rem !important; }
+        p, label, .stCaption, [data-testid="stMarkdownContainer"] { font-size: 0.86rem; }
+        div.stButton > button { padding: 0.28rem 0.65rem; min-height: 2rem; font-size: 0.86rem; }
+        textarea { font-size: 0.86rem !important; }
+        .step-guide {
+            font-size: 0.84rem;
+            line-height: 1.45;
+            color: #b7bcc7;
+            margin: 0.25rem 0 0.65rem 0;
+        }
+        .compact-status {
+            font-size: 0.82rem;
+            color: #aab0bb;
+            margin: 0.2rem 0 0.35rem 0;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def main() -> None:
-    st.title("BTTS Predictor")
-    st.caption("Saved model only. Capture or provide prediction-time inputs, then press Predict BTTS.")
+    apply_compact_styles()
+    st.markdown("### BTTS Predictor")
+
+    with st.sidebar:
+        st.header("Workspace")
+        app_page = st.radio("Page", ["Predict BTTS", "Evaluate results"], index=0)
+
+    if app_page == "Evaluate results":
+        show_evaluation_page()
+        return
 
     try:
         model, columns_payload = load_model_bundle()
@@ -583,166 +1307,217 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Prediction Setup")
-        mode = st.radio(
-            "Input mode",
-            ["Automated collectors", "Manual screenshot + standings"],
-            help="Manual mode uses what you paste/upload. Automated mode calls the existing Playwright collectors.",
-        )
-        season_id = ""
-        target_matchday = 0
-        feature_cutoff_matchday = 0
-        if mode == "Automated collectors":
-            season_id = st.text_input("season_id", value=st.session_state.get("season_id", "138596")).strip()
-            target_matchday = st.number_input(
-                "target_matchday",
-                min_value=1,
-                max_value=38,
-                value=int(st.session_state.get("target_matchday", 19)),
-            )
-            target_matchday = int(target_matchday)
-            feature_cutoff_matchday = target_matchday - live_gap_matchdays
-            st.metric("feature_cutoff_matchday", feature_cutoff_matchday)
-        else:
-            st.caption("Season and matchday are detected from the pasted standings/header text.")
+        st.caption("Season and matchday are detected from the screenshot/standings text.")
+        show_details = st.checkbox("Show detailed panels", value=False)
         st.metric("pick_threshold", f"{pick_threshold:.0%}")
         st.caption(f"Saved model features: {len(feature_columns)}")
 
-    if mode == "Automated collectors":
-        st.subheader("Automated Updates")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Update live results", use_container_width=True):
-                if not load_settings or not collect_live_results:
-                    st.error(f"Live results collector is not importable. {COLLECTOR_IMPORT_ERROR}")
-                else:
-                    with st.spinner("Collecting completed match results up to cutoff..."):
-                        try:
-                            result = collect_live_results(
-                                load_settings(),
-                                season_id=season_id,
-                                target_matchday=target_matchday,
-                                live_gap_matchdays=live_gap_matchdays,
-                                keep_open=False,
-                            )
-                            load_results_csv.clear()
-                            show_capture_result(result)
-                        except Exception as exc:
-                            st.error(f"Live results capture failed: {exc}")
-        with col2:
-            if st.button("Update odds / fixtures", use_container_width=True):
-                if not load_settings or not collect_current_odds:
-                    st.error(f"Odds collector is not importable. {COLLECTOR_IMPORT_ERROR}")
-                else:
-                    with st.spinner("Collecting upcoming fixtures and odds..."):
-                        try:
-                            result = collect_current_odds(load_settings(), keep_open=False)
-                            load_odds.clear()
-                            odds = load_odds(str(ODDS_PATH))
-                            st.success("Odds updated.")
-                            st.write(
-                                {
-                                    "rows": result.rows,
-                                    "markets_seen": result.markets_seen,
-                                    "final_path": str(result.final_path) if result.final_path else "",
-                                }
-                            )
-                        except Exception as exc:
-                            st.error(f"Odds capture failed: {exc}")
+    st.markdown("#### Manual input")
+    st.markdown(
+        """
+        <div class="step-guide">
+        <b>1.</b> Update odds first, then paste fixture screenshots and standings.<br>
+        <b>2.</b> Update live results, check compact status, then predict.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if "manual_screenshot_bytes" not in st.session_state:
+        st.session_state["manual_screenshot_bytes"] = []
 
-        live_path = Path(st.session_state.get("live_results_path", "")) if st.session_state.get("live_results_path") else find_live_results_file(season_id, target_matchday)
-        fixture_odds = selected_odds_for_matchday(odds, target_matchday)
-        st.info(f"Results source: {live_path if live_path else 'run Update live results first'}")
-        st.info(f"Fixture/odds rows for target matchday: {len(fixture_odds)}")
+    odds_col, paste_col, clear_col = st.columns([1, 1.3, 1])
+    with odds_col:
+        if st.button("1. Update odds"):
+            try:
+                with st.spinner("Updating current odds..."):
+                    odds = refresh_odds_after_live_update(show_details)
+            except Exception as exc:
+                show_exception("Odds update failed", exc)
+    with paste_col:
+        if st.button("Paste screenshot"):
+            image_bytes, error = read_clipboard_image_png()
+            if error:
+                st.error(error)
+            elif image_bytes:
+                st.session_state["manual_screenshot_bytes"].append(image_bytes)
+                st.success(f"Screenshots: {len(st.session_state['manual_screenshot_bytes'])}")
+    with clear_col:
+        if st.button("Clear screenshots"):
+            st.session_state["manual_screenshot_bytes"] = []
 
-        if st.button("Predict BTTS", type="primary"):
-            if not live_path or not live_path.exists():
-                st.error("No live results CSV found. Run Update live results first.")
-                st.stop()
-            if fixture_odds.empty:
-                st.error("No target fixtures/odds found. Run Update odds / fixtures first.")
-                st.stop()
-
-            results = load_results_csv(str(live_path))
-            bundle = make_stats_bundle(results, season_id, feature_cutoff_matchday)
-            live_df = build_prediction_features(fixture_odds, season_id, feature_cutoff_matchday, live_gap_matchdays, bundle)
-            show_prediction_output(model, live_df, feature_columns, pick_threshold, target_matchday)
-
-    else:
-        st.subheader("Manual Screenshot + Standings Input")
-        screenshots = st.file_uploader(
-            "Upload fixture screenshot(s)",
-            type=["png", "jpg", "jpeg"],
-            accept_multiple_files=True,
-            help="Upload the two fixture screenshots. This app will show them for reference; OCR extraction needs a local OCR engine.",
-        )
-        if screenshots:
+    screenshot_texts = []
+    screenshots = st.session_state["manual_screenshot_bytes"]
+    if screenshots:
+        if show_details:
             cols = st.columns(min(len(screenshots), 3))
-            for idx, upload in enumerate(screenshots):
-                cols[idx % len(cols)].image(upload, caption=upload.name, use_container_width=True)
-            if not ocr_is_available():
-                st.warning(
-                    "Screenshot OCR is not available in this Python environment. "
-                    "Use the automated odds/fixture collector, or paste the fixture lines below."
-                )
+        for idx, image_bytes in enumerate(screenshots):
+            if show_details:
+                cols[idx % len(cols)].image(image_bytes, caption=f"Screenshot {idx + 1}", width=260)
+            text = extract_text_from_image_bytes(image_bytes)
+            if text.strip():
+                screenshot_texts.append(text)
 
-        fixture_text = st.text_area(
-            "Fixture / 1X2 odds text if OCR is unavailable",
-            height=150,
-            placeholder="Example:\nARS - BOU\n1 1.78\nX 3.60\n2 4.85\n\nCHE - AST\n1 2.00\nX 4.20\n2 3.25",
+        if screenshot_texts:
+            st.caption(f"Screenshots pasted: {len(screenshots)}")
+            if show_details:
+                with st.expander("OCR text extracted from screenshots", expanded=False):
+                    st.text_area(
+                        "Extracted screenshot text",
+                        value="\n\n".join(screenshot_texts),
+                        height=220,
+                        disabled=True,
+                    )
+        else:
+            st.warning(
+                "No readable fixture text was extracted from the screenshots. "
+                "Copy a clearer screenshot or use automated odds/fixture capture."
+            )
+    else:
+        st.caption("Screenshots pasted: 0")
+
+    standings_text = st.text_area(
+        "Standings table text",
+        height=130,
+        placeholder="Paste the Season # line and the full Club Pts W D L Goals table here.",
+    )
+
+    fixture_input_text = "\n".join(screenshot_texts)
+    all_input_text = "\n".join([standings_text, fixture_input_text])
+
+    detected_season = parse_first_int(SEASON_RE, all_input_text, "season_id")
+    detected_fixture_matchday = parse_first_int(MATCHDAY_RE, fixture_input_text, "matchday")
+    detected_standings_matchday = parse_first_int(MATCHDAY_RE, standings_text, "matchday")
+    detected_matchday = detected_fixture_matchday or detected_standings_matchday
+    active_season_id = str(detected_season) if detected_season else ""
+    active_target_matchday = int(detected_matchday) if detected_matchday else None
+    active_cutoff = active_target_matchday - live_gap_matchdays if active_target_matchday else None
+
+    if (
+        detected_fixture_matchday
+        and detected_standings_matchday
+        and detected_fixture_matchday != detected_standings_matchday
+    ):
+        st.warning(
+            "Fixture screenshot matchday and standings text matchday do not match. "
+            f"Using fixture screenshot matchday {detected_fixture_matchday} for prediction."
         )
-        btts_text = st.text_area(
-            "Optional BTTS odds text",
-            height=120,
-            placeholder="Example:\nARS - BOU\nYes 1.60\nNo 2.30",
+
+    standings = parse_standings_text(standings_text)
+    fixture_rows = parse_fixtures_and_odds(fixture_input_text, active_target_matchday or 0)
+    btts_rows = parse_btts_odds_text("")
+    fixture_odds = merge_fixture_odds(fixture_rows, odds, btts_rows)
+
+    st.caption(
+        " | ".join(
+            [
+                f"season_id: {active_season_id or '-'}",
+                f"target_matchday: {active_target_matchday if active_target_matchday else '-'}",
+                f"feature_cutoff_matchday: {active_cutoff if active_cutoff is not None else '-'}",
+            ]
         )
-        standings_text = st.text_area(
-            "Standings table text",
-            height=260,
-            placeholder="Paste the Season # line and the full Club Pts W D L Goals table here.",
+    )
+
+    manual_live_path = None
+    if active_season_id and active_target_matchday:
+        manual_live_path = session_live_results_file(active_season_id, active_target_matchday) or find_exact_live_results_file(
+            active_season_id,
+            active_target_matchday,
         )
 
-        detected_season = parse_first_int(SEASON_RE, standings_text, "season_id")
-        detected_matchday = parse_first_int(MATCHDAY_RE, standings_text + "\n" + fixture_text, "matchday")
-        active_season_id = str(detected_season) if detected_season else ""
-        active_target_matchday = int(detected_matchday) if detected_matchday else None
-        active_cutoff = active_target_matchday - live_gap_matchdays if active_target_matchday else None
+    if st.button("2. Update live results"):
+        if not active_season_id:
+            st.error("No season_id was detected yet. Paste standings text containing a line like Season #138605.")
+        elif not active_target_matchday:
+            st.error("No target matchday was detected yet. Paste the fixture screenshots first.")
+        elif not load_settings or not collect_live_results:
+            st.error(f"Live results collector is not importable. {COLLECTOR_IMPORT_ERROR}")
+        else:
+            with st.spinner("Capturing raw completed results up to the cutoff matchday..."):
+                try:
+                    result = run_live_results_capture_command(
+                        active_season_id,
+                        active_target_matchday,
+                        live_gap_matchdays,
+                    )
+                    load_results_csv.clear()
+                    show_capture_result(result, show_details)
+                    manual_live_path = Path(result.output_path)
+                except Exception as exc:
+                    show_exception("Live results capture failed", exc)
 
-        standings = parse_standings_text(standings_text)
-        fixture_rows = parse_fixtures_and_odds(fixture_text, active_target_matchday or 0)
-        btts_rows = parse_btts_odds_text(btts_text)
-        fixture_odds = merge_fixture_odds(fixture_rows, odds, btts_rows)
+    if active_season_id and active_target_matchday:
+        if manual_live_path:
+            st.caption(f"Live results: {manual_live_path.name}")
+        else:
+            st.caption("Live results: not updated for this matchday yet.")
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("season_id", active_season_id or "-")
-        col2.metric("target_matchday", active_target_matchday if active_target_matchday else "-")
-        col3.metric("feature_cutoff_matchday", active_cutoff if active_cutoff is not None else "-")
+    manual_live_df = None
+    if active_season_id and active_target_matchday and not fixture_odds.empty and not standings.empty:
+        if manual_live_path and manual_live_path.exists():
+            results = load_results_csv(str(manual_live_path))
+            bundle = make_stats_bundle(results, active_season_id, active_cutoff)
+            feature_source = f"raw live results CSV: {manual_live_path}"
+            manual_live_df = build_prediction_features(
+                fixture_odds,
+                active_season_id,
+                active_cutoff,
+                live_gap_matchdays,
+                bundle,
+            )
+            show_manual_input_verification(
+                manual_live_df,
+                feature_columns,
+                standings,
+                fixture_odds,
+                feature_source,
+                show_details,
+            )
+        else:
+            st.caption(
+                f"Captured: {len(fixture_odds)} fixtures and {len(standings)} standings teams. "
+                "Run Update live results."
+            )
+            if show_details:
+                tabs = st.tabs(["Fixtures", "Standings", "Missing until live results"])
+                with tabs[0]:
+                    st.dataframe(
+                        fixture_odds[["matchday", "home_team", "away_team"]],
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                with tabs[1]:
+                    st.dataframe(standings, use_container_width=True, hide_index=True)
+                with tabs[2]:
+                    st.warning(
+                        "The 21 performance/form features below require raw match-by-match results. "
+                        "Click Update live results to create the current-season CSV, then this table will become the full model input."
+                    )
+                    st.dataframe(
+                        pd.DataFrame(
+                            {
+                                "feature": LIVE_RESULTS_REQUIRED_FEATURES,
+                                "source_needed": "data/live_seasons raw results CSV",
+                            }
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+    else:
+        st.caption("Paste the fixture screenshots and standings text to build the model input table.")
 
-        with st.expander("Parsed inputs", expanded=False):
-            st.write("Fixtures")
-            st.dataframe(fixture_odds[["home_team", "away_team"] + [c for c in ODDS_RAW_COLUMNS if c in fixture_odds.columns]], use_container_width=True, hide_index=True)
-            st.write("Standings")
-            st.dataframe(standings, use_container_width=True, hide_index=True)
-
-        if st.button("Predict BTTS", type="primary"):
-            if not active_season_id:
-                st.error("No season_id was detected. Paste standings text containing a line like Season #138605.")
-                st.stop()
-            if not active_target_matchday:
-                st.error("No target matchday was detected. Paste text containing a line like Matchday 19.")
-                st.stop()
-            if fixture_odds.empty:
-                st.error(
-                    "No fixtures were found. Screenshot OCR is not available here, so use automated odds/fixture "
-                    "capture or paste fixture lines like ARS - MCI."
-                )
-                st.stop()
-            if standings.empty:
-                st.error("No standings rows were found. Paste the full Club Pts W D L Goals table before predicting.")
-                st.stop()
-
-            bundle = build_standings_bundle(standings)
-            live_df = build_prediction_features(fixture_odds, active_season_id, active_cutoff, live_gap_matchdays, bundle)
-            show_prediction_output(model, live_df, feature_columns, pick_threshold, active_target_matchday)
+    if st.button("Predict BTTS", type="primary"):
+        if not active_season_id:
+            st.error("No season_id was detected. Paste standings text containing a line like Season #138605.")
+        elif not active_target_matchday:
+            st.error("No target matchday was detected. Paste the fixture screenshots first.")
+        elif fixture_odds.empty:
+            st.error("No fixtures were found from the pasted screenshots.")
+        elif standings.empty:
+            st.error("No standings rows were found. Paste the full Club Pts W D L Goals table before predicting.")
+        elif manual_live_df is None:
+            st.error("Run Update live results first, then verify the Model input table before predicting.")
+        else:
+            show_prediction_output(model, manual_live_df, feature_columns, pick_threshold, active_target_matchday)
 
 
 def show_prediction_output(
@@ -752,14 +1527,6 @@ def show_prediction_output(
     pick_threshold: float,
     target_matchday: int,
 ) -> None:
-    missing = missing_feature_table(live_df, feature_columns)
-    with st.expander("Missing Prediction Fields", expanded=not missing.empty):
-        if missing.empty:
-            st.success("All saved model features are present.")
-        else:
-            st.warning("The model will impute the missing numeric fields below.")
-            st.dataframe(missing, use_container_width=True, hide_index=True)
-
     try:
         predictions = make_predictions(model, live_df, feature_columns, pick_threshold)
     except Exception as exc:
@@ -768,10 +1535,12 @@ def show_prediction_output(
 
     st.subheader("BTTS Predictions")
     st.dataframe(format_predictions(predictions), use_container_width=True, hide_index=True)
+    output_path = save_predictions_live_file(predictions)
+    st.caption(f"Updated live predictions file: {output_path}")
     st.download_button(
         "Download predictions CSV",
-        data=predictions.to_csv(index=False).encode("utf-8"),
-        file_name=f"btts_predictions_md{target_matchday}.csv",
+        data=output_path.read_bytes(),
+        file_name=output_path.name,
         mime="text/csv",
     )
 

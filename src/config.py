@@ -54,7 +54,7 @@ def load_settings() -> Settings:
         matchdays_per_season=int(os.getenv("MATCHDAYS_PER_SEASON", "38")),
         action_delay_ms=int(os.getenv("ACTION_DELAY_MS", "500")),
         page_ready_timeout_ms=int(os.getenv("PAGE_READY_TIMEOUT_MS", "30000")),
-        user_data_dir=ROOT / "auth" / "browser-profile",
+        user_data_dir=Path(os.getenv("USER_DATA_DIR", ROOT / "auth" / "browser-profile")),
         database_path=ROOT / "data" / "betpawa_virtuals.sqlite",
         export_dir=ROOT / "exports",
         odds_dir=ROOT / "odds",

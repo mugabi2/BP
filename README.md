@@ -18,6 +18,33 @@ The default `.env` points to your installed Chrome with `CHROME_PATH`.
 If Chrome is installed somewhere else, update that path.
 If you prefer Playwright's bundled Chromium, remove `CHROME_PATH` and run `playwright install chromium`.
 
+## Run the Streamlit app
+
+From PowerShell:
+
+```powershell
+cd "D:\Codex things\BP"
+C:\Users\SAMUEL\anaconda3\python.exe -m streamlit run app.py
+```
+
+Open the local URL Streamlit prints, usually:
+
+```text
+http://localhost:8501
+```
+
+In the app, use the manual prediction flow:
+
+1. Click `1. Update odds`.
+2. Paste fixture screenshots from the clipboard.
+3. Paste the standings table text.
+4. Click `2. Update live results`.
+5. Click `Predict BTTS`.
+
+Each prediction run updates the single live predictions file:
+
+- `outputs/btts_predictions_live.csv`
+
 ## Login once
 
 ```powershell

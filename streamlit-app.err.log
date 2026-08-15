@@ -1,0 +1,21 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 189, in _run_module_as_main
+  File "<frozen runpy>", line 148, in _get_module_details
+  File "<frozen runpy>", line 112, in _get_module_details
+  File "C:\Users\SAMUEL\anaconda3\Lib\site-packages\streamlit\__init__.py", line 77, in <module>
+    from streamlit.delta_generator import DeltaGenerator as _DeltaGenerator
+  File "C:\Users\SAMUEL\anaconda3\Lib\site-packages\streamlit\delta_generator.py", line 34, in <module>
+    from streamlit import (
+    ...<7 lines>...
+    )
+  File "C:\Users\SAMUEL\anaconda3\Lib\site-packages\streamlit\cursor.py", line 21, in <module>
+    from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
+  File "C:\Users\SAMUEL\anaconda3\Lib\site-packages\streamlit\runtime\__init__.py", line 17, in <module>
+    from streamlit.runtime.runtime import Runtime, RuntimeConfig, RuntimeState
+  File "C:\Users\SAMUEL\anaconda3\Lib\site-packages\streamlit\runtime\runtime.py", line 17, in <module>
+    import asyncio
+  File "C:\Users\SAMUEL\anaconda3\Lib\asyncio\__init__.py", line 43, in <module>
+    from .windows_events import *
+  File "C:\Users\SAMUEL\anaconda3\Lib\asyncio\windows_events.py", line 8, in <module>
+    import _overlapped
+OSError: [WinError 10106] The requested service provider could not be loaded or initialized

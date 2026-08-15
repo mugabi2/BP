@@ -67,6 +67,45 @@
     "market_btts_no_prob_norm"
   ],
   "excluded_all_missing_features": [],
+  "selected_model_name": "LogisticRegression",
+  "model_comparison": [
+    {
+      "model": "LogisticRegression",
+      "accuracy": 0.5691,
+      "roc_auc": 0.5255,
+      "brier_score": 0.2471
+    },
+    {
+      "model": "SoftVotingEnsemble",
+      "accuracy": 0.5624,
+      "roc_auc": 0.5322,
+      "brier_score": 0.2463
+    },
+    {
+      "model": "GradientBoostingClassifier",
+      "accuracy": 0.5607,
+      "roc_auc": 0.5448,
+      "brier_score": 0.2493
+    },
+    {
+      "model": "RandomForestClassifier",
+      "accuracy": 0.5557,
+      "roc_auc": 0.5207,
+      "brier_score": 0.2476
+    },
+    {
+      "model": "HistGradientBoostingClassifier",
+      "accuracy": 0.5507,
+      "roc_auc": 0.5184,
+      "brier_score": 0.272
+    },
+    {
+      "model": "ExtraTreesClassifier",
+      "accuracy": 0.5374,
+      "roc_auc": 0.5372,
+      "brier_score": 0.248
+    }
+  ],
   "live_gap_matchdays": 2,
   "pick_threshold": 0.65,
   "notes": "For live MD 24 prediction while MD 23 is playing, build features using results up to MD 22 and MD 24 odds."
