@@ -258,7 +258,7 @@ def upsert_many(conn: sqlite3.Connection, table: str, rows: Iterable[dict]) -> i
 
 def export_csvs(conn: sqlite3.Connection, export_dir: Path) -> None:
     export_dir.mkdir(parents=True, exist_ok=True)
-    match_results_dir = export_dir.parent / "Match day results"
+    match_results_dir = export_dir.parent / "match_day_results"
     match_results_dir.mkdir(parents=True, exist_ok=True)
     fieldnames = {
         "seasons": SEASONS_FIELDS,
@@ -304,11 +304,12 @@ def export_csvs(conn: sqlite3.Connection, export_dir: Path) -> None:
             else:
                 rows = conn.execute(f"SELECT * FROM {table}").fetchall()
         output_dir = match_results_dir if table == "match_results" else export_dir
-        path = output_dir / f"{table}.csv"
+        filename = "match_results_master.csv" if table == "match_results" else "seasons_master.csv"
+        path = output_dir / filename
         try:
             write_csv(path, fieldnames[table], rows)
         except PermissionError:
-            fallback_path = output_dir / f"{table}_latest.csv"
+            fallback_path = output_dir / f"{path.stem}_latest.csv"
             write_csv(fallback_path, fieldnames[table], rows)
             logging.warning(
                 "Could not update %s because it is open/locked. Wrote %s instead.",

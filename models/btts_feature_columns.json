@@ -67,43 +67,43 @@
     "market_btts_no_prob_norm"
   ],
   "excluded_all_missing_features": [],
-  "selected_model_name": "LogisticRegression",
+  "selected_model_name": "GradientBoostingClassifier",
   "model_comparison": [
     {
-      "model": "LogisticRegression",
-      "accuracy": 0.5691,
-      "roc_auc": 0.5255,
-      "brier_score": 0.2471
+      "model": "GradientBoostingClassifier",
+      "accuracy": 0.5766,
+      "roc_auc": 0.5464,
+      "brier_score": 0.2438
     },
     {
       "model": "SoftVotingEnsemble",
-      "accuracy": 0.5624,
-      "roc_auc": 0.5322,
-      "brier_score": 0.2463
-    },
-    {
-      "model": "GradientBoostingClassifier",
-      "accuracy": 0.5607,
-      "roc_auc": 0.5448,
-      "brier_score": 0.2493
-    },
-    {
-      "model": "RandomForestClassifier",
-      "accuracy": 0.5557,
-      "roc_auc": 0.5207,
-      "brier_score": 0.2476
+      "accuracy": 0.5566,
+      "roc_auc": 0.5414,
+      "brier_score": 0.2451
     },
     {
       "model": "HistGradientBoostingClassifier",
-      "accuracy": 0.5507,
-      "roc_auc": 0.5184,
-      "brier_score": 0.272
+      "accuracy": 0.553,
+      "roc_auc": 0.5296,
+      "brier_score": 0.2512
+    },
+    {
+      "model": "RandomForestClassifier",
+      "accuracy": 0.5484,
+      "roc_auc": 0.5325,
+      "brier_score": 0.2478
     },
     {
       "model": "ExtraTreesClassifier",
-      "accuracy": 0.5374,
-      "roc_auc": 0.5372,
-      "brier_score": 0.248
+      "accuracy": 0.5372,
+      "roc_auc": 0.5352,
+      "brier_score": 0.2483
+    },
+    {
+      "model": "LogisticRegression",
+      "accuracy": 0.5305,
+      "roc_auc": 0.5337,
+      "brier_score": 0.2492
     }
   ],
   "live_gap_matchdays": 2,

@@ -112,8 +112,8 @@ def collect_odds(settings: Settings, keep_open: bool = False) -> OddsCollectionR
             captures_dir = all_odds_dir(settings)
             snapshot_path = write_snapshot(captures_dir, rows, captured_at)
             daily_path = append_csv(captures_dir / f"odds_captured_on_{local_date_stamp()}.csv", rows)
-            history_path = append_csv(captures_dir / "odds_history.csv", rows)
-            final_path = upsert_final_odds(final_odds_dir(settings) / "final_odds.csv", rows)
+            history_path = append_csv(captures_dir / "odds_history_master.csv", rows)
+            final_path = upsert_final_odds(final_odds_dir(settings) / "final_odds_master.csv", rows)
         else:
             logging.warning("No odds were captured from the currently visible upcoming page.")
 
@@ -482,7 +482,7 @@ def upsert_final_odds(path: Path, new_rows: list[dict]) -> Path:
         write_csv(path, merged_rows)
         return path
     except PermissionError:
-        fallback_path = path.with_name("final_odds_latest.csv")
+        fallback_path = path.with_name("final_odds_master_latest.csv")
         write_csv(fallback_path, merged_rows)
         logging.warning(
             "Could not update %s because it is probably open in Excel. Wrote %s instead.",

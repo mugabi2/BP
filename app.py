@@ -39,9 +39,9 @@ except Exception as exc:  # pragma: no cover - Streamlit will show a button-leve
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODEL_PATH = PROJECT_ROOT / "models" / "btts_model.joblib"
 COLUMNS_PATH = PROJECT_ROOT / "models" / "btts_feature_columns.json"
-ODDS_PATH = PROJECT_ROOT / "odds" / "final_odds" / "final_odds.csv"
-PREDICTIONS_DIR = PROJECT_ROOT / "outputs"
-LIVE_PREDICTIONS_PATH = PREDICTIONS_DIR / "btts_predictions_live.csv"
+ODDS_PATH = PROJECT_ROOT / "data" / "odds" / "final_odds" / "final_odds_master.csv"
+PREDICTIONS_DIR = PROJECT_ROOT / "data" / "outputs"
+LIVE_PREDICTIONS_PATH = PREDICTIONS_DIR / "btts_predictions_live_master.csv"
 LIVE_RESULTS_DIR = PROJECT_ROOT / "data" / "live_seasons"
 LIVE_RESULTS_FILE_RE = re.compile(r"^season_(?P<season_id>\d+)_tgt_md(?P<target_matchday>\d+)_results\.csv$")
 STREAMLIT_BROWSER_PROFILE_DIR = Path(gettempdir()) / "btts-streamlit-browser-profile"
@@ -938,7 +938,7 @@ def show_evaluation_visuals(evaluated: pd.DataFrame, by_matchday: pd.DataFrame, 
 def show_evaluation_page() -> None:
     st.subheader("Prediction Evaluation")
     st.caption(
-        "Compares saved predictions in outputs with completed actual results from data/live_seasons. "
+        "Compares saved predictions in data/outputs with completed actual results from data/live_seasons. "
         "This measures model understanding, not betting ROI."
     )
 
