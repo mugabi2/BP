@@ -89,6 +89,13 @@ def collect_live_results(
 
         needed_matchdays = list(range(1, max(feature_cutoff_matchday, 0) + 1))
         missing_matchdays = [matchday for matchday in needed_matchdays if matchday not in already_complete]
+        logging.info(
+            "Live capture plan season=%s target_md=%s cutoff_md=%s missing=%s",
+            selected_season_id,
+            selected_target_matchday,
+            feature_cutoff_matchday,
+            len(missing_matchdays),
+        )
 
         captured_at = now_iso()
         fetched_rows: list[dict] = []
