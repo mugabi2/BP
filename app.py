@@ -1505,6 +1505,7 @@ def main() -> None:
             ]
         )
     )
+    st.title(f"MD {active_target_matchday:02d}" if active_target_matchday else "MD —")
 
     manual_live_path = None
     if active_season_id and active_target_matchday:
@@ -1518,11 +1519,34 @@ def main() -> None:
             st.error(f"Live results collector is not importable. {COLLECTOR_IMPORT_ERROR}")
         else:
             capture_status = st.empty()
+            update_progress_state = {"total": 0, "completed": 0}
+            update_progress_bar = st.progress(
+                0,
+                text="Waiting for Playwright to detect missing matchdays...",
+            )
 
             def show_update_plan(season_id: str, target_md: int, cutoff_md: int, missing: int) -> None:
+                update_progress_state["total"] = missing
                 capture_status.info(
                     f"Playwright detected season {season_id}, target matchday {target_md}. "
                     f"Capturing missing matchdays through {cutoff_md} ({missing} missing)."
+                )
+                if missing == 0:
+                    update_progress_bar.progress(100, text="No missing matchdays")
+                else:
+                    update_progress_bar.progress(
+                        0,
+                        text=f"Preparing to capture {missing} missing matchday(s)...",
+                    )
+
+            def update_live_results_progress(matchday: int) -> None:
+                update_progress_state["completed"] += 1
+                total = max(update_progress_state["total"], 1)
+                completed = min(update_progress_state["completed"], total)
+                percent = min(int((completed / total) * 100), 99)
+                update_progress_bar.progress(
+                    percent,
+                    text=f"Processed missing matchday {matchday} ({completed}/{total})",
                 )
 
             with st.spinner("Capturing raw completed results up to the cutoff matchday..."):
@@ -1531,6 +1555,7 @@ def main() -> None:
                         None,
                         None,
                         live_gap_matchdays,
+                        progress_callback=update_live_results_progress,
                         plan_callback=show_update_plan,
                     )
                     load_results_csv.clear()
@@ -1541,6 +1566,7 @@ def main() -> None:
                     active_cutoff = result.feature_cutoff_matchday
                     st.session_state["playwright_season_id"] = result.season_id
                     st.session_state["playwright_target_matchday"] = result.target_matchday
+                    update_progress_bar.progress(100, text="Live results update complete")
                 except Exception as exc:
                     show_exception("Live results capture failed", exc)
 
