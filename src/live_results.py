@@ -58,7 +58,6 @@ def collect_live_results(
     output_dir = live_results_dir(settings)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    settings.user_data_dir.mkdir(parents=True, exist_ok=True)
     playwright, context, page = open_context(settings)
     try:
         open_results_page(page, settings)

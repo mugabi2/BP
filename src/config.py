@@ -29,7 +29,6 @@ class Settings:
     matchdays_per_season: int
     action_delay_ms: int
     page_ready_timeout_ms: int
-    user_data_dir: Path
     database_url: str
     data_dir: Path
     odds_dir: Path
@@ -60,7 +59,6 @@ def load_settings() -> Settings:
         matchdays_per_season=int(os.getenv("MATCHDAYS_PER_SEASON", "38")),
         action_delay_ms=int(os.getenv("ACTION_DELAY_MS", "500")),
         page_ready_timeout_ms=int(os.getenv("PAGE_READY_TIMEOUT_MS", "30000")),
-        user_data_dir=Path(os.getenv("USER_DATA_DIR", ROOT / "auth" / "browser-profile")),
         database_url=database_url,
         data_dir=ROOT / "data",
         odds_dir=ROOT / "odds",
