@@ -71,39 +71,39 @@
   "model_comparison": [
     {
       "model": "GradientBoostingClassifier",
-      "accuracy": 0.5829,
-      "roc_auc": 0.5532,
-      "brier_score": 0.2416
+      "accuracy": 0.588,
+      "roc_auc": 0.5723,
+      "brier_score": 0.2399
     },
     {
       "model": "HistGradientBoostingClassifier",
-      "accuracy": 0.5829,
-      "roc_auc": 0.5502,
-      "brier_score": 0.2418
+      "accuracy": 0.5865,
+      "roc_auc": 0.5713,
+      "brier_score": 0.24
     },
     {
       "model": "SoftVotingEnsemble",
-      "accuracy": 0.5765,
-      "roc_auc": 0.5511,
-      "brier_score": 0.2433
+      "accuracy": 0.5786,
+      "roc_auc": 0.5727,
+      "brier_score": 0.2414
     },
     {
       "model": "RandomForestClassifier",
-      "accuracy": 0.5517,
-      "roc_auc": 0.5417,
-      "brier_score": 0.2469
-    },
-    {
-      "model": "LogisticRegression",
-      "accuracy": 0.5472,
-      "roc_auc": 0.5535,
-      "brier_score": 0.2473
+      "accuracy": 0.5608,
+      "roc_auc": 0.5619,
+      "brier_score": 0.2454
     },
     {
       "model": "ExtraTreesClassifier",
-      "accuracy": 0.5433,
-      "roc_auc": 0.5395,
-      "brier_score": 0.2475
+      "accuracy": 0.5602,
+      "roc_auc": 0.5644,
+      "brier_score": 0.2454
+    },
+    {
+      "model": "LogisticRegression",
+      "accuracy": 0.5591,
+      "roc_auc": 0.5755,
+      "brier_score": 0.2452
     }
   ],
   "live_gap_matchdays": 2,
