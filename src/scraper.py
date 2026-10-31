@@ -325,7 +325,7 @@ def existing_matchday_rows(conn, season_id: str, matchday: int) -> list[dict]:
             fulltime_away_goals,
             captured_at
         FROM match_results
-        WHERE season_id = ? AND matchday = ?
+        WHERE season_id = %s AND matchday = %s
         """,
         (season_id, matchday),
     ).fetchall()
