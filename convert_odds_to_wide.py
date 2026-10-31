@@ -44,13 +44,14 @@ def main() -> int:
 
 def convert_odds_folder(odds_dir: Path) -> list[tuple[Path, int, str]]:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    captures_dir = odds_dir / "all_odds_files"
     candidates = [
         path
-        for path in sorted(odds_dir.glob("odds_snapshot_*.csv"))
+        for path in sorted(captures_dir.glob("odds_snapshot_*.csv"))
         if "_long_legacy_" not in path.stem and "_wide_" not in path.stem
     ]
-    candidates.extend(sorted(odds_dir.glob("odds_captured_on_*.csv")))
-    candidates.append(odds_dir / "odds_history.csv")
+    candidates.extend(sorted(captures_dir.glob("odds_captured_on_*.csv")))
+    candidates.append(captures_dir / "odds_history_master.csv")
 
     converted = []
     seen_paths = set()

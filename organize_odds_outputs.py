@@ -10,7 +10,7 @@ from src.odds_scraper import ODDS_FIELDS, all_odds_dir, final_odds_dir, upsert_f
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Organize odds CSVs and rebuild final_odds.csv.")
+    parser = argparse.ArgumentParser(description="Organize odds CSVs and rebuild final_odds_master.csv.")
     parser.add_argument(
         "--copy-only",
         action="store_true",
@@ -26,7 +26,7 @@ def main() -> int:
 
     arranged = arrange_root_csvs(settings.odds_dir, captures_dir, copy_only=args.copy_only)
     rows = read_all_wide_capture_rows(captures_dir)
-    final_path = upsert_final_odds(final_dir / "final_odds.csv", rows) if rows else None
+    final_path = upsert_final_odds(final_dir / "final_odds_master.csv", rows) if rows else None
 
     print(f"Arranged files: {arranged}")
     print(f"Rows used for final odds: {len(rows)}")

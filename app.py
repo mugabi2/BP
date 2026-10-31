@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import queue
 import subprocess
+import threading
+import time
 import sys
 import traceback
 import warnings
@@ -39,10 +42,13 @@ except Exception as exc:  # pragma: no cover - Streamlit will show a button-leve
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODEL_PATH = PROJECT_ROOT / "models" / "btts_model.joblib"
 COLUMNS_PATH = PROJECT_ROOT / "models" / "btts_feature_columns.json"
-ODDS_PATH = PROJECT_ROOT / "odds" / "final_odds" / "final_odds.csv"
-PREDICTIONS_DIR = PROJECT_ROOT / "outputs"
-LIVE_PREDICTIONS_PATH = PREDICTIONS_DIR / "btts_predictions_live.csv"
+ODDS_PATH = PROJECT_ROOT / "data" / "odds" / "final_odds" / "final_odds_master.csv"
+PREDICTIONS_DIR = PROJECT_ROOT / "data" / "outputs"
+LIVE_PREDICTIONS_PATH = PREDICTIONS_DIR / "btts_predictions_live_master.csv"
 LIVE_RESULTS_DIR = PROJECT_ROOT / "data" / "live_seasons"
+SOUND_DIR = PROJECT_ROOT / "data" / "sounds"
+THRESHOLD_BELL_PATH = SOUND_DIR / "mixkit-bell-notification-933.wav"
+PREDICTION_DONE_POP_PATH = SOUND_DIR / "mixkit-long-pop-2358.wav"
 LIVE_RESULTS_FILE_RE = re.compile(r"^season_(?P<season_id>\d+)_tgt_md(?P<target_matchday>\d+)_results\.csv$")
 STREAMLIT_BROWSER_PROFILE_DIR = Path(gettempdir()) / "btts-streamlit-browser-profile"
 TESSERACT_EXE_PATHS = [
@@ -696,10 +702,17 @@ def format_predictions(predictions: pd.DataFrame) -> pd.io.formats.style.Styler:
     table = predictions.copy()
     table["btts_yes_probability"] = table["btts_yes_probability"].map(lambda value: f"{value:.1%}")
     table["confidence"] = table["confidence"].map(lambda value: f"{value:.1%}")
-    return table.style.applymap(
+    return table.style.map(
         lambda value: "font-weight: 700; color: #0f7b0f" if value == "Pick" else "color: #777",
         subset=["decision"],
     )
+
+
+def play_prediction_alert(predictions: pd.DataFrame) -> None:
+    has_threshold_pick = bool(predictions["decision"].eq("Pick").any())
+    sound_path = THRESHOLD_BELL_PATH if has_threshold_pick else PREDICTION_DONE_POP_PATH
+    if sound_path.is_file():
+        st.audio(sound_path.read_bytes(), format="audio/wav", autoplay=True)
 
 
 def save_predictions_live_file(predictions: pd.DataFrame) -> Path:
@@ -938,7 +951,7 @@ def show_evaluation_visuals(evaluated: pd.DataFrame, by_matchday: pd.DataFrame, 
 def show_evaluation_page() -> None:
     st.subheader("Prediction Evaluation")
     st.caption(
-        "Compares saved predictions in outputs with completed actual results from data/live_seasons. "
+        "Compares saved predictions in data/outputs with completed actual results from data/live_seasons. "
         "This measures model understanding, not betting ROI."
     )
 
@@ -1146,7 +1159,15 @@ def load_streamlit_collector_settings():
     return replace(settings, user_data_dir=STREAMLIT_BROWSER_PROFILE_DIR)
 
 
-def run_live_results_capture_command(season_id: str, target_matchday: int, live_gap_matchdays: int):
+def run_live_results_capture_command(
+    season_id: str | None,
+    target_matchday: int | None,
+    live_gap_matchdays: int,
+    timeout_seconds: int | None = 300,
+    progress_callback=None,
+    timer_callback=None,
+    plan_callback=None,
+):
     env = os.environ.copy()
     env["USER_DATA_DIR"] = str(STREAMLIT_BROWSER_PROFILE_DIR)
     STREAMLIT_BROWSER_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
@@ -1154,32 +1175,96 @@ def run_live_results_capture_command(season_id: str, target_matchday: int, live_
     command = [
         sys.executable,
         str(PROJECT_ROOT / "collect_live_results.py"),
-        "--season-id",
-        str(season_id),
-        "--target-matchday",
-        str(target_matchday),
         "--live-gap-matchdays",
         str(live_gap_matchdays),
     ]
-    completed = subprocess.run(
+    if season_id:
+        command.extend(["--season-id", str(season_id)])
+    if target_matchday:
+        command.extend(["--target-matchday", str(target_matchday)])
+    process = subprocess.Popen(
         command,
         cwd=PROJECT_ROOT,
         env=env,
         text=True,
-        capture_output=True,
-        timeout=300,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=1,
     )
-    output = "\n".join(part for part in [completed.stdout, completed.stderr] if part.strip())
-    if completed.returncode != 0:
-        raise RuntimeError(output.strip() or f"collect_live_results.py exited with code {completed.returncode}")
+    output_lines = []
+    output_queue = queue.Queue()
+
+    def read_process_output():
+        if process.stdout is None:
+            return
+        for line in process.stdout:
+            output_queue.put(line)
+
+    reader = threading.Thread(target=read_process_output, daemon=True)
+    reader.start()
+    started_at = time.monotonic()
+    last_reported_matchday = None
+    last_reported_second = -1
+
+    while process.poll() is None or not output_queue.empty():
+        elapsed_seconds = int(time.monotonic() - started_at)
+        if timer_callback and elapsed_seconds != last_reported_second:
+            timer_callback(elapsed_seconds)
+            last_reported_second = elapsed_seconds
+
+        if timeout_seconds is not None and elapsed_seconds > timeout_seconds:
+            process.kill()
+            process.wait()
+            raise subprocess.TimeoutExpired(command, timeout_seconds)
+
+        try:
+            line = output_queue.get(timeout=0.25)
+        except queue.Empty:
+            continue
+
+        output_lines.append(line)
+        plan_match = re.search(
+            r"Live capture plan season=(\d+) target_md=(\d+) cutoff_md=(\d+) missing=(\d+)",
+            line,
+        )
+        if plan_match and plan_callback:
+            plan_callback(
+                plan_match.group(1),
+                int(plan_match.group(2)),
+                int(plan_match.group(3)),
+                int(plan_match.group(4)),
+            )
+        match = re.search(r"Live results season=.*? matchday=(\d+) rows=", line)
+        if match and progress_callback:
+            reported_matchday = int(match.group(1))
+            if reported_matchday != last_reported_matchday:
+                progress_callback(reported_matchday)
+                last_reported_matchday = reported_matchday
+
+    reader.join(timeout=1)
+    while not output_queue.empty():
+        output_lines.append(output_queue.get_nowait())
+
+    output = "".join(output_lines)
+    if process.returncode != 0:
+        raise RuntimeError(output.strip() or f"collect_live_results.py exited with code {process.returncode}")
 
     summary = parse_live_capture_output(output)
-    output_path = LIVE_RESULTS_DIR / f"season_{season_id}_tgt_md{target_matchday}_results.csv"
+    detected_season_id = str(summary.get("season") or season_id or "")
+    detected_target_matchday = int(summary.get("target_md") or target_matchday or 0)
+    if not detected_season_id or not detected_target_matchday:
+        raise RuntimeError("The collector finished without reporting the detected season and target matchday.")
+    detected_cutoff_matchday = int(
+        summary.get("cutoff_md") or (detected_target_matchday - live_gap_matchdays)
+    )
+    output_path = LIVE_RESULTS_DIR / (
+        f"season_{detected_season_id}_tgt_md{detected_target_matchday}_results.csv"
+    )
 
     return SimpleNamespace(
-        season_id=str(summary.get("season") or season_id),
-        target_matchday=int(summary.get("target_md") or target_matchday),
-        feature_cutoff_matchday=int(summary.get("cutoff_md") or (target_matchday - live_gap_matchdays)),
+        season_id=detected_season_id,
+        target_matchday=detected_target_matchday,
+        feature_cutoff_matchday=detected_cutoff_matchday,
         output_path=output_path,
         previous_path=None,
         reused_matchdays=parse_int_list(summary.get("reused", "")),
@@ -1275,6 +1360,13 @@ def apply_compact_styles() -> None:
             font-size: 0.82rem;
             color: #aab0bb;
             margin: 0.2rem 0 0.35rem 0;
+        }
+        .matchday-badge {
+            font-size: 1.8rem;
+            font-weight: 800;
+            line-height: 2rem;
+            white-space: nowrap;
+            margin: 0;
         }
         </style>
         """,
@@ -1377,7 +1469,7 @@ def main() -> None:
 
     standings_text = st.text_area(
         "Standings table text",
-        height=130,
+        height=90,
         placeholder="Paste the Season # line and the full Club Pts W D L Goals table here.",
     )
 
@@ -1388,8 +1480,12 @@ def main() -> None:
     detected_fixture_matchday = parse_first_int(MATCHDAY_RE, fixture_input_text, "matchday")
     detected_standings_matchday = parse_first_int(MATCHDAY_RE, standings_text, "matchday")
     detected_matchday = detected_fixture_matchday or detected_standings_matchday
-    active_season_id = str(detected_season) if detected_season else ""
-    active_target_matchday = int(detected_matchday) if detected_matchday else None
+    active_season_id = str(
+        detected_season or st.session_state.get("playwright_season_id") or ""
+    )
+    active_target_matchday = int(
+        detected_matchday or st.session_state.get("playwright_target_matchday") or 0
+    ) or None
     active_cutoff = active_target_matchday - live_gap_matchdays if active_target_matchday else None
 
     if (
@@ -1416,6 +1512,16 @@ def main() -> None:
             ]
         )
     )
+    md_col, update_col, first_time_col, predict_col = st.columns([0.7, 1.5, 2.2, 1.2])
+    with md_col:
+        matchday_label = f"MD {active_target_matchday:02d}" if active_target_matchday else "MD —"
+        st.markdown(f'<div class="matchday-badge">{matchday_label}</div>', unsafe_allow_html=True)
+    with update_col:
+        update_live_clicked = st.button("2. Update live results")
+    with first_time_col:
+        first_time_clicked = st.button("First-time season setup (full history)")
+    with predict_col:
+        predict_clicked = st.button("Predict BTTS", type="primary")
 
     manual_live_path = None
     if active_season_id and active_target_matchday:
@@ -1424,26 +1530,124 @@ def main() -> None:
             active_target_matchday,
         )
 
-    if st.button("2. Update live results"):
-        if not active_season_id:
-            st.error("No season_id was detected yet. Paste standings text containing a line like Season #138605.")
-        elif not active_target_matchday:
-            st.error("No target matchday was detected yet. Paste the fixture screenshots first.")
-        elif not load_settings or not collect_live_results:
+    if update_live_clicked:
+        if not load_settings or not collect_live_results:
             st.error(f"Live results collector is not importable. {COLLECTOR_IMPORT_ERROR}")
         else:
+            capture_status = st.empty()
+            update_progress_state = {"total": 0, "completed": 0}
+            update_progress_bar = st.progress(
+                0,
+                text="Waiting for Playwright to detect missing matchdays...",
+            )
+
+            def show_update_plan(season_id: str, target_md: int, cutoff_md: int, missing: int) -> None:
+                update_progress_state["total"] = missing
+                capture_status.info(
+                    f"Playwright detected season {season_id}, target matchday {target_md}. "
+                    f"Capturing missing matchdays through {cutoff_md} ({missing} missing)."
+                )
+                if missing == 0:
+                    update_progress_bar.progress(100, text="No missing matchdays")
+                else:
+                    update_progress_bar.progress(
+                        0,
+                        text=f"Preparing to capture {missing} missing matchday(s)...",
+                    )
+
+            def update_live_results_progress(matchday: int) -> None:
+                update_progress_state["completed"] += 1
+                total = max(update_progress_state["total"], 1)
+                completed = min(update_progress_state["completed"], total)
+                percent = min(int((completed / total) * 100), 99)
+                update_progress_bar.progress(
+                    percent,
+                    text=f"Processed missing matchday {matchday} ({completed}/{total})",
+                )
+
             with st.spinner("Capturing raw completed results up to the cutoff matchday..."):
                 try:
                     result = run_live_results_capture_command(
-                        active_season_id,
-                        active_target_matchday,
+                        None,
+                        None,
                         live_gap_matchdays,
+                        progress_callback=update_live_results_progress,
+                        plan_callback=show_update_plan,
                     )
                     load_results_csv.clear()
                     show_capture_result(result, show_details)
                     manual_live_path = Path(result.output_path)
+                    active_season_id = result.season_id
+                    active_target_matchday = result.target_matchday
+                    active_cutoff = result.feature_cutoff_matchday
+                    st.session_state["playwright_season_id"] = result.season_id
+                    st.session_state["playwright_target_matchday"] = result.target_matchday
+                    update_progress_bar.progress(100, text="Live results update complete")
                 except Exception as exc:
                     show_exception("Live results capture failed", exc)
+
+    if first_time_clicked:
+        if not load_settings or not collect_live_results:
+            st.error(f"Live results collector is not importable. {COLLECTOR_IMPORT_ERROR}")
+        else:
+            cutoff_holder = {"value": None}
+            capture_status = st.empty()
+            progress_bar = st.progress(
+                0,
+                text="Waiting for Playwright to detect the current season and matchday...",
+            )
+            timer_placeholder = st.empty()
+            timer_placeholder.metric("Elapsed time", "00:00:00")
+
+            def show_first_time_plan(season_id: str, target_md: int, cutoff_md: int, missing: int) -> None:
+                cutoff_holder["value"] = max(cutoff_md, 1)
+                capture_status.info(
+                    f"Playwright detected season {season_id}, target matchday {target_md}. "
+                    f"Backfilling matchdays 1-{cutoff_md} ({missing} missing)."
+                )
+                progress_bar.progress(
+                    0,
+                    text=f"Preparing historical matchdays 1-{cutoff_md}...",
+                )
+
+            def update_first_time_progress(matchday: int) -> None:
+                cutoff_matchday = cutoff_holder["value"] or max(matchday, 1)
+                percent = min(max(int((matchday / cutoff_matchday) * 100), 1), 99)
+                progress_bar.progress(
+                    percent,
+                    text=f"Processed matchday {matchday} of {cutoff_matchday}",
+                )
+
+            def update_first_time_timer(elapsed_seconds: int) -> None:
+                hours, remainder = divmod(elapsed_seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                timer_placeholder.metric(
+                    "Elapsed time",
+                    f"{hours:02d}:{minutes:02d}:{seconds:02d}",
+                )
+
+            with st.spinner("Capturing the season history. This first run can take several minutes..."):
+                try:
+                    result = run_live_results_capture_command(
+                        None,
+                        None,
+                        live_gap_matchdays,
+                        timeout_seconds=None,
+                        progress_callback=update_first_time_progress,
+                        timer_callback=update_first_time_timer,
+                        plan_callback=show_first_time_plan,
+                    )
+                    load_results_csv.clear()
+                    show_capture_result(result, show_details)
+                    manual_live_path = Path(result.output_path)
+                    active_season_id = result.season_id
+                    active_target_matchday = result.target_matchday
+                    active_cutoff = result.feature_cutoff_matchday
+                    st.session_state["playwright_season_id"] = result.season_id
+                    st.session_state["playwright_target_matchday"] = result.target_matchday
+                    progress_bar.progress(100, text="Season history capture complete")
+                except Exception as exc:
+                    show_exception("First-time season setup failed", exc)
 
     if active_season_id and active_target_matchday:
         if manual_live_path:
@@ -1505,7 +1709,7 @@ def main() -> None:
     else:
         st.caption("Paste the fixture screenshots and standings text to build the model input table.")
 
-    if st.button("Predict BTTS", type="primary"):
+    if predict_clicked:
         if not active_season_id:
             st.error("No season_id was detected. Paste standings text containing a line like Season #138605.")
         elif not active_target_matchday:
@@ -1533,9 +1737,30 @@ def show_prediction_output(
         st.error(f"Prediction failed: {exc}")
         st.stop()
 
-    st.subheader("BTTS Predictions")
-    st.dataframe(format_predictions(predictions), use_container_width=True, hide_index=True)
     output_path = save_predictions_live_file(predictions)
+
+    qualified_predictions = predictions[predictions["decision"].eq("Pick")].copy()
+    display_predictions = qualified_predictions.drop(
+        columns=["season_id", "target_matchday", "feature_cutoff_matchday"],
+        errors="ignore",
+    )
+
+    st.subheader("Qualified BTTS Picks")
+    if len(predictions) < 10:
+        st.warning(
+            f"Predicted all {len(predictions)} detected fixtures. "
+            f"{10 - len(predictions)} fixture(s) were not detected and are not included."
+        )
+    if display_predictions.empty:
+        st.info("No predictions reached the pick threshold.")
+    else:
+        try:
+            prediction_table = format_predictions(display_predictions)
+        except Exception as exc:
+            st.warning(f"Table styling was skipped, but predictions were completed and saved: {exc}")
+            prediction_table = display_predictions
+        st.dataframe(prediction_table, use_container_width=True, hide_index=True)
+    play_prediction_alert(predictions)
     st.caption(f"Updated live predictions file: {output_path}")
     st.download_button(
         "Download predictions CSV",
