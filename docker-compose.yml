@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bp}
+      POSTGRES_USER: ${POSTGRES_USER:-bp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - bp_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bp_user} -d ${POSTGRES_DB:-bp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    ipc: host
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bp_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bp}
+      HEADLESS: "true"
+      BROWSER_CHANNEL: ""
+      CHROME_PATH: ""
+      USER_DATA_DIR: /app/auth/browser-profile
+      COLLECT_INTERVAL_SECONDS: ${COLLECT_INTERVAL_SECONDS:-10800}
+      COLLECT_RETRY_SECONDS: ${COLLECT_RETRY_SECONDS:-300}
+    volumes:
+      - ./auth:/app/auth
+      - ./logs:/app/logs
+      - ./data:/app/data
+    stop_grace_period: 30s
+
+volumes:
+  bp_postgres_data:
