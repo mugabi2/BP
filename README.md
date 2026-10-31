@@ -104,3 +104,16 @@ See `VPS_DEPLOYMENT.md`.
 - The VPS collector runs headless.
 - The public historical-results collection does not require login or a saved browser session.
 - If the site changes its layout, the Playwright selectors/parsing in `src/scraper.py` may need adjustment.
+
+
+## Metabase
+
+The VPS Docker stack includes Metabase for visual exploration of PostgreSQL data.
+
+```text
+Metabase: http://YOUR_VPS_IP:3000
+Data source host inside Docker: postgres
+Data source database: bp
+```
+
+Metabase application metadata is stored separately in `metabase_app`.

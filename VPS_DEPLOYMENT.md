@@ -97,3 +97,46 @@ docker compose exec collector python collect_virtuals.py collect
 The scheduled run and manual run share a PostgreSQL advisory lock. If one harvest is already active, a second trigger exits cleanly instead of running two collectors at once.
 
 Incomplete matchdays or seasons do not stop the overall harvest. The collector continues to later matchdays and seasons, leaves the incomplete season marked unsuccessful, and can retry its missing data on a future run.
+
+
+## Metabase
+
+The Docker stack also runs Metabase on port 3000 by default.
+
+Start or update the stack:
+
+```bash
+cd /opt/bp
+git pull
+docker compose up -d --build
+```
+
+Check the services:
+
+```bash
+docker compose ps
+docker compose logs -f metabase
+```
+
+Open Metabase in a browser:
+
+```text
+http://YOUR_VPS_IP:3000
+```
+
+Complete the first-run Metabase admin setup, then add the BetPawa PostgreSQL database with:
+
+```text
+Database type: PostgreSQL
+Display name: BP
+Host: postgres
+Port: 5432
+Database name: bp
+Username: bp_user
+Password: the POSTGRES_PASSWORD value from .env
+SSL: off
+```
+
+Metabase stores its own users, questions, and dashboards in a separate PostgreSQL database named `metabase_app`. BetPawa match data remains in `bp`.
+
+If port 3000 is blocked by the VPS firewall, allow TCP 3000 temporarily and then reload the page. Once Metabase is working, prefer putting it behind HTTPS/reverse proxy rather than leaving a raw public port as the permanent setup.
