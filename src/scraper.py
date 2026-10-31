@@ -64,34 +64,21 @@ def now_iso() -> str:
 def open_context(settings: Settings):
     playwright = sync_playwright().start()
     launch_options = {
-        "user_data_dir": str(settings.user_data_dir),
         "headless": settings.headless,
-        "viewport": {"width": 1366, "height": 900},
         "args": ["--disable-quic"],
     }
     if settings.chrome_path:
         launch_options["executable_path"] = settings.chrome_path
     elif settings.browser_channel:
         launch_options["channel"] = settings.browser_channel
-    context = playwright.chromium.launch_persistent_context(**launch_options)
-    page = context.pages[0] if context.pages else context.new_page()
+
+    browser = playwright.chromium.launch(**launch_options)
+    context = browser.new_context(viewport={"width": 1366, "height": 900})
+    page = context.new_page()
     return playwright, context, page
 
 
-def login_once(settings: Settings) -> None:
-    settings.user_data_dir.mkdir(parents=True, exist_ok=True)
-    playwright, context, page = open_context(settings)
-    try:
-        page.goto(settings.url, wait_until="domcontentloaded", timeout=60_000)
-        print("Browser opened. Log in manually, then return here and press Enter.")
-        input()
-    finally:
-        context.close()
-        playwright.stop()
-
-
 def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResult:
-    settings.user_data_dir.mkdir(parents=True, exist_ok=True)
     result = CollectionResult()
     playwright, context, page = open_context(settings)
     try:
@@ -128,7 +115,7 @@ def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResu
             timer_started_at = perf_counter()
             match_results = []
             try:
-                from .db import export_csvs, finish_season_capture, start_season_capture
+                from .db import finish_season_capture, start_season_capture
 
                 start_season_capture(
                     conn,
@@ -173,7 +160,6 @@ def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResu
                     },
                 )
                 conn.commit()
-                export_csvs(conn, settings.export_dir)
                 logging.info(
                     "Season %s finished: matchdays=%s matches=%s successful=%s",
                     season_id,
@@ -184,7 +170,7 @@ def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResu
             except Exception as exc:
                 conn.rollback()
                 try:
-                    from .db import export_csvs, finish_season_capture
+                    from .db import finish_season_capture
 
                     finish_season_capture(
                         conn,
@@ -199,7 +185,6 @@ def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResu
                         },
                     )
                     conn.commit()
-                    export_csvs(conn, settings.export_dir)
                 except Exception:
                     conn.rollback()
                 logging.exception("Failed collecting season %s", season_id)
@@ -224,17 +209,10 @@ def save_matchday_rows(conn, settings: Settings, rows: list[dict]) -> int:
     if not rows:
         return 0
 
-    from .db import export_csvs, upsert_many
+    from .db import upsert_many
 
     changes = upsert_many(conn, "match_results", rows)
     conn.commit()
-    try:
-        export_csvs(conn, settings.export_dir)
-    except PermissionError:
-        logging.warning(
-            "Could not refresh CSV because it is probably open in Excel. "
-            "Close match_results.csv and run python collect_virtuals.py export."
-        )
     return changes
 
 
@@ -334,7 +312,7 @@ def existing_matchday_rows(conn, season_id: str, matchday: int) -> list[dict]:
             fulltime_away_goals,
             captured_at
         FROM match_results
-        WHERE season_id = ? AND matchday = ?
+        WHERE season_id = %s AND matchday = %s
         """,
         (season_id, matchday),
     ).fetchall()

@@ -5,8 +5,8 @@ import logging
 import sys
 
 from src.config import load_settings
-from src.db import connect, export_csvs
-from src.scraper import collect, login_once
+from src.db import connect, release_collection_lock, try_acquire_collection_lock
+from src.scraper import collect
 
 
 def configure_logging(log_path):
@@ -23,8 +23,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Collect betPawa virtual league results.")
     parser.add_argument(
         "command",
-        choices=("login", "collect", "export"),
-        help="login saves a reusable browser session; collect scrapes and exports; export only writes CSVs.",
+        choices=("collect",),
+        help="collect scrapes public virtual-results data into PostgreSQL.",
     )
     parser.add_argument(
         "--keep-open",
@@ -36,25 +36,24 @@ def main() -> int:
     settings = load_settings()
     configure_logging(settings.log_path)
 
-    if args.command == "login":
-        login_once(settings)
-        return 0
-
-    conn = connect(settings.database_path)
+    conn = connect(settings.database_url)
+    lock_acquired = False
     try:
-        if args.command == "collect":
-            result = collect(settings, conn, keep_open=args.keep_open)
-            export_csvs(conn, settings.export_dir)
-            logging.info(
-                "Done. seasons=%s skipped=%s match_changes=%s",
-                result.seasons_seen,
-                result.seasons_skipped,
-                result.match_rows,
-            )
-        elif args.command == "export":
-            export_csvs(conn, settings.export_dir)
-            logging.info("CSV export complete.")
+        lock_acquired = try_acquire_collection_lock(conn)
+        if not lock_acquired:
+            logging.info("Another collection run is already active. Skipping this trigger.")
+            return 0
+
+        result = collect(settings, conn, keep_open=args.keep_open)
+        logging.info(
+            "Done. seasons=%s skipped=%s match_changes=%s",
+            result.seasons_seen,
+            result.seasons_skipped,
+            result.match_rows,
+        )
     finally:
+        if lock_acquired:
+            release_collection_lock(conn)
         conn.close()
 
     return 0

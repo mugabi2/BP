@@ -29,15 +29,20 @@ class Settings:
     matchdays_per_season: int
     action_delay_ms: int
     page_ready_timeout_ms: int
-    user_data_dir: Path
-    database_path: Path
-    export_dir: Path
+    database_url: str
+    data_dir: Path
     odds_dir: Path
     log_path: Path
 
 
 def load_settings() -> Settings:
     load_dotenv(ROOT / ".env")
+
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise ValueError(
+            "DATABASE_URL is required. Copy .env.example to .env and set the PostgreSQL connection string."
+        )
 
     return Settings(
         url=os.getenv(
@@ -47,16 +52,15 @@ def load_settings() -> Settings:
         league_id=os.getenv("LEAGUE_ID", "7794"),
         league_name=os.getenv("LEAGUE_NAME", "English League"),
         headless=_bool(os.getenv("HEADLESS"), default=False),
-        browser_channel=os.getenv("BROWSER_CHANNEL", "chrome") or None,
+        browser_channel=os.getenv("BROWSER_CHANNEL") or None,
         chrome_path=os.getenv("CHROME_PATH") or None,
         max_seasons=int(os.getenv("MAX_SEASONS", "10")),
         skip_latest_season=_bool(os.getenv("SKIP_LATEST_SEASON"), default=True),
-        matchdays_per_season=int(os.getenv("MATCHDAYS_PER_SEASON", "38")),
+        matchdays_per_season=int(os.getenv("MATCHDAYS_PER_SEASON", "34")),
         action_delay_ms=int(os.getenv("ACTION_DELAY_MS", "500")),
         page_ready_timeout_ms=int(os.getenv("PAGE_READY_TIMEOUT_MS", "30000")),
-        user_data_dir=Path(os.getenv("USER_DATA_DIR", ROOT / "auth" / "browser-profile")),
-        database_path=ROOT / "data" / "betpawa_virtuals.sqlite",
-        export_dir=ROOT / "exports",
+        database_url=database_url,
+        data_dir=ROOT / "data",
         odds_dir=ROOT / "odds",
         log_path=ROOT / "logs" / "collector.log",
     )

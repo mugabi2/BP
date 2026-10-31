@@ -41,7 +41,7 @@ class LiveResultsCaptureResult:
 
 
 def live_results_dir(settings: Settings) -> Path:
-    return settings.database_path.parent / "live_seasons"
+    return settings.data_dir / "live_seasons"
 
 
 def live_results_path(output_dir: Path, season_id: str, target_matchday: int) -> Path:
@@ -58,7 +58,6 @@ def collect_live_results(
     output_dir = live_results_dir(settings)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    settings.user_data_dir.mkdir(parents=True, exist_ok=True)
     playwright, context, page = open_context(settings)
     try:
         open_results_page(page, settings)

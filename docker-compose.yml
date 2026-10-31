@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bp}
+      POSTGRES_USER: ${POSTGRES_USER:-bp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - bp_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bp_user} -d ${POSTGRES_DB:-bp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  metabase-init:
+    image: postgres:17-bookworm
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-bp_user}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    command:
+      - sh
+      - -lc
+      - |
+        if psql -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='metabase_app'" | grep -q 1; then
+          echo "metabase_app database already exists"
+        else
+          createdb -O "$$PGUSER" metabase_app
+          echo "created metabase_app database"
+        fi
+
+  metabase:
+    image: metabase/metabase:v0.64.1
+    restart: unless-stopped
+    depends_on:
+      metabase-init:
+        condition: service_completed_successfully
+    ports:
+      - "${METABASE_PORT:-3000}:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase_app
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER:-bp_user}
+      MB_DB_PASS: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      MB_DB_HOST: postgres
+      JAVA_TIMEZONE: ${COLLECT_TIMEZONE:-Africa/Kampala}
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail -I http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    ipc: host
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bp_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bp}
+      HEADLESS: "true"
+      BROWSER_CHANNEL: ""
+      CHROME_PATH: ""
+      COLLECT_TIME: ${COLLECT_TIME:-13:00}
+      COLLECT_TIMEZONE: ${COLLECT_TIMEZONE:-Africa/Kampala}
+      COLLECT_RETRY_SECONDS: ${COLLECT_RETRY_SECONDS:-300}
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    stop_grace_period: 30s
+
+volumes:
+  bp_postgres_data:

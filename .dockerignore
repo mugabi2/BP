@@ -1,0 +1,14 @@
+.git
+.venv
+.env
+__pycache__
+*.pyc
+auth
+data
+exports
+logs
+odds
+outputs
+models
+notebooks
+Match day results
