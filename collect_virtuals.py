@@ -6,7 +6,7 @@ import sys
 
 from src.config import load_settings
 from src.db import connect
-from src.scraper import collect, login_once
+from src.scraper import collect
 
 
 def configure_logging(log_path):
@@ -23,8 +23,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Collect betPawa virtual league results.")
     parser.add_argument(
         "command",
-        choices=("login", "collect"),
-        help="login saves a reusable browser session; collect scrapes results into PostgreSQL.",
+        choices=("collect",),
+        help="collect scrapes public virtual-results data into PostgreSQL.",
     )
     parser.add_argument(
         "--keep-open",
@@ -35,10 +35,6 @@ def main() -> int:
 
     settings = load_settings()
     configure_logging(settings.log_path)
-
-    if args.command == "login":
-        login_once(settings)
-        return 0
 
     conn = connect(settings.database_url)
     try:

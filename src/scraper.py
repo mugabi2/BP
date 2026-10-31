@@ -64,34 +64,21 @@ def now_iso() -> str:
 def open_context(settings: Settings):
     playwright = sync_playwright().start()
     launch_options = {
-        "user_data_dir": str(settings.user_data_dir),
         "headless": settings.headless,
-        "viewport": {"width": 1366, "height": 900},
         "args": ["--disable-quic"],
     }
     if settings.chrome_path:
         launch_options["executable_path"] = settings.chrome_path
     elif settings.browser_channel:
         launch_options["channel"] = settings.browser_channel
-    context = playwright.chromium.launch_persistent_context(**launch_options)
-    page = context.pages[0] if context.pages else context.new_page()
+
+    browser = playwright.chromium.launch(**launch_options)
+    context = browser.new_context(viewport={"width": 1366, "height": 900})
+    page = context.new_page()
     return playwright, context, page
 
 
-def login_once(settings: Settings) -> None:
-    settings.user_data_dir.mkdir(parents=True, exist_ok=True)
-    playwright, context, page = open_context(settings)
-    try:
-        page.goto(settings.url, wait_until="domcontentloaded", timeout=60_000)
-        print("Browser opened. Log in manually, then return here and press Enter.")
-        input()
-    finally:
-        context.close()
-        playwright.stop()
-
-
 def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResult:
-    settings.user_data_dir.mkdir(parents=True, exist_ok=True)
     result = CollectionResult()
     playwright, context, page = open_context(settings)
     try:

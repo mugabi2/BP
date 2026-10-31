@@ -15,7 +15,7 @@ COPY collect_virtuals.py run_collector.py ./
 COPY src ./src
 
 RUN useradd --create-home --uid 10001 collector \
-    && mkdir -p /app/auth/browser-profile /app/logs /app/data \
+    && mkdir -p /app/logs /app/data \
     && chown -R collector:collector /app
 
 USER collector

@@ -31,11 +31,9 @@ services:
       HEADLESS: "true"
       BROWSER_CHANNEL: ""
       CHROME_PATH: ""
-      USER_DATA_DIR: /app/auth/browser-profile
       COLLECT_INTERVAL_SECONDS: ${COLLECT_INTERVAL_SECONDS:-10800}
       COLLECT_RETRY_SECONDS: ${COLLECT_RETRY_SECONDS:-300}
     volumes:
-      - ./auth:/app/auth
       - ./logs:/app/logs
       - ./data:/app/data
     stop_grace_period: 30s
