@@ -53,7 +53,7 @@ def load_settings() -> Settings:
         league_id=os.getenv("LEAGUE_ID", "7794"),
         league_name=os.getenv("LEAGUE_NAME", "English League"),
         headless=_bool(os.getenv("HEADLESS"), default=False),
-        browser_channel=os.getenv("BROWSER_CHANNEL", "chrome") or None,
+        browser_channel=os.getenv("BROWSER_CHANNEL") or None,
         chrome_path=os.getenv("CHROME_PATH") or None,
         max_seasons=int(os.getenv("MAX_SEASONS", "10")),
         skip_latest_season=_bool(os.getenv("SKIP_LATEST_SEASON"), default=True),
