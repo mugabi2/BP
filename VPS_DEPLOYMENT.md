@@ -1,10 +1,12 @@
 # BP VPS Data Collection
 
-This deployment runs only the main virtual-results collection pipeline:
+This deployment runs the main virtual-results collection pipeline:
 
 ```text
-betPawa -> Playwright collector -> PostgreSQL
+betPawa public virtual-results pages -> Playwright -> PostgreSQL
 ```
+
+No betPawa login or saved browser session is required for this collector.
 
 The collector runs immediately when the stack starts. After a successful run it starts the next run on the configured interval (default: 3 hours). Failed runs retry sooner (default: 5 minutes).
 
@@ -81,7 +83,3 @@ docker compose down
 ```
 
 Do not use `docker compose down -v` unless you intentionally want to delete the PostgreSQL volume.
-
-## Browser session note
-
-The browser profile is persisted under `./auth`. If betPawa blocks collection because a login is required, seed the saved browser profile before continuing. Do not expose a browser or PostgreSQL port to the public internet just to solve authentication.

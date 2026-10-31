@@ -75,7 +75,6 @@ class OddsCollectionResult:
 
 
 def collect_odds(settings: Settings, keep_open: bool = False) -> OddsCollectionResult:
-    settings.user_data_dir.mkdir(parents=True, exist_ok=True)
     all_odds_dir(settings).mkdir(parents=True, exist_ok=True)
     final_odds_dir(settings).mkdir(parents=True, exist_ok=True)
 
@@ -102,8 +101,7 @@ def collect_odds(settings: Settings, keep_open: bool = False) -> OddsCollectionR
             logging.warning("Wrote page diagnostics to %s.", settings.log_path.parent / "last_page_text.txt")
             if page_requires_login(page):
                 logging.error(
-                    "The odds page opened without the saved logged-in session. "
-                    "Run python collect_virtuals.py login, log in, then run collect_odds.py again."
+                    "The odds page is showing a login wall, so odds could not be collected anonymously."
                 )
 
         rows = pivot_odds_rows(raw_rows)
