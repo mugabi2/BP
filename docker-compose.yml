@@ -31,7 +31,8 @@ services:
       HEADLESS: "true"
       BROWSER_CHANNEL: ""
       CHROME_PATH: ""
-      COLLECT_INTERVAL_SECONDS: ${COLLECT_INTERVAL_SECONDS:-10800}
+      COLLECT_TIME: ${COLLECT_TIME:-13:00}
+      COLLECT_TIMEZONE: ${COLLECT_TIMEZONE:-Africa/Kampala}
       COLLECT_RETRY_SECONDS: ${COLLECT_RETRY_SECONDS:-300}
     volumes:
       - ./logs:/app/logs

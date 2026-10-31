@@ -62,15 +62,16 @@ If a season is already fully captured, the collector skips it on future runs.
 
 ## VPS schedule
 
-The Docker collector runs once immediately when it starts. After a successful collection, it runs again after the configured interval.
+The historical-results collector runs once per day at a fixed wall-clock time.
 
 Default:
 
 ```text
-COLLECT_INTERVAL_SECONDS=10800
+COLLECT_TIME=13:00
+COLLECT_TIMEZONE=Africa/Kampala
 ```
 
-That is 3 hours. Failed runs retry using `COLLECT_RETRY_SECONDS`.
+That is 1:00 PM Kampala time every day. Successful runs then stay idle until the next day's 1:00 PM schedule. Failed runs retry using `COLLECT_RETRY_SECONDS`.
 
 ## Collect live season results for prediction
 

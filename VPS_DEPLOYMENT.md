@@ -8,7 +8,7 @@ betPawa public virtual-results pages -> Playwright -> PostgreSQL
 
 No betPawa login or saved browser session is required for this collector.
 
-The collector runs immediately when the stack starts. After a successful run it starts the next run on the configured interval (default: 3 hours). Failed runs retry sooner (default: 5 minutes).
+The collector runs once per day at 1:00 PM Africa/Kampala time. Successful runs then stay idle until the next day's 1:00 PM schedule. Failed runs retry after 5 minutes.
 
 ## 1. Clone the deployment branch
 
@@ -58,7 +58,7 @@ docker compose ps
 docker compose logs -f collector
 ```
 
-The collector should log that it started a collection immediately.
+The collector should log its next scheduled collection time. At 1:00 PM Kampala time it starts the collection.
 
 ## 5. Verify PostgreSQL is receiving data
 
