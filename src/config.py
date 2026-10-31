@@ -56,7 +56,7 @@ def load_settings() -> Settings:
         chrome_path=os.getenv("CHROME_PATH") or None,
         max_seasons=int(os.getenv("MAX_SEASONS", "10")),
         skip_latest_season=_bool(os.getenv("SKIP_LATEST_SEASON"), default=True),
-        matchdays_per_season=int(os.getenv("MATCHDAYS_PER_SEASON", "38")),
+        matchdays_per_season=int(os.getenv("MATCHDAYS_PER_SEASON", "34")),
         action_delay_ms=int(os.getenv("ACTION_DELAY_MS", "500")),
         page_ready_timeout_ms=int(os.getenv("PAGE_READY_TIMEOUT_MS", "30000")),
         database_url=database_url,

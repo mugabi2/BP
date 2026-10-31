@@ -6,6 +6,9 @@ import psycopg
 from psycopg.rows import dict_row
 
 
+COLLECTION_LOCK_ID = 7794001
+
+
 MATCH_RESULT_FIELDS = [
     "season_id",
     "matchday",
@@ -59,6 +62,23 @@ def connect(database_url: str):
         conn.execute(statement)
     conn.commit()
     return conn
+
+
+def try_acquire_collection_lock(conn) -> bool:
+    row = conn.execute(
+        "SELECT pg_try_advisory_lock(%s) AS acquired",
+        (COLLECTION_LOCK_ID,),
+    ).fetchone()
+    conn.commit()
+    return bool(row and row["acquired"])
+
+
+def release_collection_lock(conn) -> None:
+    conn.execute(
+        "SELECT pg_advisory_unlock(%s)",
+        (COLLECTION_LOCK_ID,),
+    )
+    conn.commit()
 
 
 def start_season_capture(conn, row: dict) -> None:

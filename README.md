@@ -71,7 +71,7 @@ COLLECT_TIME=13:00
 COLLECT_TIMEZONE=Africa/Kampala
 ```
 
-That is 1:00 PM Kampala time every day. Successful runs then stay idle until the next day's 1:00 PM schedule. Failed runs retry using `COLLECT_RETRY_SECONDS`.
+That is 1:00 PM Kampala time every day. Successful runs then stay idle until the next day's 1:00 PM schedule. Failed runs retry using `COLLECT_RETRY_SECONDS`. A manual harvest can also be started at any time with `docker compose exec collector python collect_virtuals.py collect`. Overlapping runs are prevented with a PostgreSQL advisory lock.
 
 ## Collect live season results for prediction
 

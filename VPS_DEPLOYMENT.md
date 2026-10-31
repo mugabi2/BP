@@ -83,3 +83,17 @@ docker compose down
 ```
 
 Do not use `docker compose down -v` unless you intentionally want to delete the PostgreSQL volume.
+
+
+## Run a harvest manually
+
+You do not have to wait for the 1:00 PM schedule. Trigger a harvest at any time with:
+
+```bash
+cd /opt/bp
+docker compose exec collector python collect_virtuals.py collect
+```
+
+The scheduled run and manual run share a PostgreSQL advisory lock. If one harvest is already active, a second trigger exits cleanly instead of running two collectors at once.
+
+Incomplete matchdays or seasons do not stop the overall harvest. The collector continues to later matchdays and seasons, leaves the incomplete season marked unsuccessful, and can retry its missing data on a future run.
