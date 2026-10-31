@@ -41,7 +41,7 @@ class LiveResultsCaptureResult:
 
 
 def live_results_dir(settings: Settings) -> Path:
-    return settings.database_path.parent / "live_seasons"
+    return settings.data_dir / "live_seasons"
 
 
 def live_results_path(output_dir: Path, season_id: str, target_matchday: int) -> Path:

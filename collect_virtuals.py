@@ -5,7 +5,7 @@ import logging
 import sys
 
 from src.config import load_settings
-from src.db import connect, export_csvs
+from src.db import connect
 from src.scraper import collect, login_once
 
 
@@ -23,8 +23,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Collect betPawa virtual league results.")
     parser.add_argument(
         "command",
-        choices=("login", "collect", "export"),
-        help="login saves a reusable browser session; collect scrapes and exports; export only writes CSVs.",
+        choices=("login", "collect"),
+        help="login saves a reusable browser session; collect scrapes results into PostgreSQL.",
     )
     parser.add_argument(
         "--keep-open",
@@ -40,20 +40,15 @@ def main() -> int:
         login_once(settings)
         return 0
 
-    conn = connect(settings.database_path)
+    conn = connect(settings.database_url)
     try:
-        if args.command == "collect":
-            result = collect(settings, conn, keep_open=args.keep_open)
-            export_csvs(conn, settings.export_dir)
-            logging.info(
-                "Done. seasons=%s skipped=%s match_changes=%s",
-                result.seasons_seen,
-                result.seasons_skipped,
-                result.match_rows,
-            )
-        elif args.command == "export":
-            export_csvs(conn, settings.export_dir)
-            logging.info("CSV export complete.")
+        result = collect(settings, conn, keep_open=args.keep_open)
+        logging.info(
+            "Done. seasons=%s skipped=%s match_changes=%s",
+            result.seasons_seen,
+            result.seasons_skipped,
+            result.match_rows,
+        )
     finally:
         conn.close()
 

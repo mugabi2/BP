@@ -30,14 +30,20 @@ class Settings:
     action_delay_ms: int
     page_ready_timeout_ms: int
     user_data_dir: Path
-    database_path: Path
-    export_dir: Path
+    database_url: str
+    data_dir: Path
     odds_dir: Path
     log_path: Path
 
 
 def load_settings() -> Settings:
     load_dotenv(ROOT / ".env")
+
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise ValueError(
+            "DATABASE_URL is required. Copy .env.example to .env and set the PostgreSQL connection string."
+        )
 
     return Settings(
         url=os.getenv(
@@ -55,8 +61,8 @@ def load_settings() -> Settings:
         action_delay_ms=int(os.getenv("ACTION_DELAY_MS", "500")),
         page_ready_timeout_ms=int(os.getenv("PAGE_READY_TIMEOUT_MS", "30000")),
         user_data_dir=Path(os.getenv("USER_DATA_DIR", ROOT / "auth" / "browser-profile")),
-        database_path=ROOT / "data" / "betpawa_virtuals.sqlite",
-        export_dir=ROOT / "exports",
+        database_url=database_url,
+        data_dir=ROOT / "data",
         odds_dir=ROOT / "odds",
         log_path=ROOT / "logs" / "collector.log",
     )

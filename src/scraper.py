@@ -128,7 +128,7 @@ def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResu
             timer_started_at = perf_counter()
             match_results = []
             try:
-                from .db import export_csvs, finish_season_capture, start_season_capture
+                from .db import finish_season_capture, start_season_capture
 
                 start_season_capture(
                     conn,
@@ -173,7 +173,6 @@ def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResu
                     },
                 )
                 conn.commit()
-                export_csvs(conn, settings.export_dir)
                 logging.info(
                     "Season %s finished: matchdays=%s matches=%s successful=%s",
                     season_id,
@@ -184,7 +183,7 @@ def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResu
             except Exception as exc:
                 conn.rollback()
                 try:
-                    from .db import export_csvs, finish_season_capture
+                    from .db import finish_season_capture
 
                     finish_season_capture(
                         conn,
@@ -199,7 +198,6 @@ def collect(settings: Settings, conn, keep_open: bool = False) -> CollectionResu
                         },
                     )
                     conn.commit()
-                    export_csvs(conn, settings.export_dir)
                 except Exception:
                     conn.rollback()
                 logging.exception("Failed collecting season %s", season_id)
@@ -224,17 +222,10 @@ def save_matchday_rows(conn, settings: Settings, rows: list[dict]) -> int:
     if not rows:
         return 0
 
-    from .db import export_csvs, upsert_many
+    from .db import upsert_many
 
     changes = upsert_many(conn, "match_results", rows)
     conn.commit()
-    try:
-        export_csvs(conn, settings.export_dir)
-    except PermissionError:
-        logging.warning(
-            "Could not refresh CSV because it is probably open in Excel. "
-            "Close match_results.csv and run python collect_virtuals.py export."
-        )
     return changes
 
 

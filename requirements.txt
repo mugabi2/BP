@@ -7,3 +7,4 @@ joblib
 scikit-learn
 pillow
 pytesseract
+psycopg[binary]>=3.1,<4
