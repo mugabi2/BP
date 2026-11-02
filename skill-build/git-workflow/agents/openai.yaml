@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Workflow"
+  short_description: "Run safe, reviewable Git repository workflows"
+  default_prompt: "Use $git-workflow to complete this repository change with a safe, reviewable Git workflow."

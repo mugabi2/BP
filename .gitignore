@@ -1,4 +1,6 @@
 .venv/
+env_bp/
+node_modules/
 __pycache__/
 *.pyc
 .env

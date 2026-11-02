@@ -89,10 +89,19 @@ def collect_live_results(
 
         needed_matchdays = list(range(1, max(feature_cutoff_matchday, 0) + 1))
         missing_matchdays = [matchday for matchday in needed_matchdays if matchday not in already_complete]
+        output_path = live_results_path(output_dir, selected_season_id, int(selected_target_matchday))
+        logging.info(
+            "Live capture plan season=%s target_md=%s cutoff_md=%s missing=%s",
+            selected_season_id,
+            selected_target_matchday,
+            feature_cutoff_matchday,
+            len(missing_matchdays),
+        )
 
         captured_at = now_iso()
         fetched_rows: list[dict] = []
         fetched_matchdays: list[int] = []
+        checkpoint_rows = sort_rows(normalize_rows(existing_rows, selected_season_id))
         for matchday in missing_matchdays:
             page.goto(matchday_url(settings, selected_season_id, matchday), wait_until="load", timeout=60_000)
             page.wait_for_timeout(settings.action_delay_ms)
@@ -102,6 +111,14 @@ def collect_live_results(
             if rows:
                 fetched_rows.extend(rows)
                 fetched_matchdays.append(matchday)
+                checkpoint_rows = normalize_rows(existing_rows + fetched_rows, selected_season_id)
+                checkpoint_rows = [
+                    row
+                    for row in checkpoint_rows
+                    if int(row["matchday"]) <= max(feature_cutoff_matchday, 0)
+                ]
+                checkpoint_rows = sort_rows(checkpoint_rows)
+                write_live_results(output_path, checkpoint_rows)
             logging.info(
                 "Live results season=%s matchday=%s rows=%s",
                 selected_season_id,
@@ -113,7 +130,6 @@ def collect_live_results(
         final_rows = [row for row in final_rows if int(row["matchday"]) <= max(feature_cutoff_matchday, 0)]
         final_rows = sort_rows(final_rows)
 
-        output_path = live_results_path(output_dir, selected_season_id, int(selected_target_matchday))
         write_live_results(output_path, final_rows)
         remove_old_live_results_files(output_dir, selected_season_id, output_path)
 

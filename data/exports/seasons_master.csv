@@ -1,0 +1,72 @@
+season_id,league_id,league_name,capture_started_at,capture_finished_at,duration_seconds,matchdays_captured,matches_captured,successful,error
+138676,7794,English League,2026-08-15T03:59:10+00:00,2026-08-15T04:17:42+00:00,1111,33,330,no,captured 33/34 matchdays; captured 330/340 matches
+138675,7794,English League,2026-08-15T03:40:47+00:00,2026-08-15T03:59:10+00:00,1102,34,340,yes,
+138674,7794,English League,2026-08-15T03:22:30+00:00,2026-08-15T03:40:47+00:00,1096,34,340,yes,
+138673,7794,English League,2026-08-15T03:04:15+00:00,2026-08-15T03:22:30+00:00,1094,34,340,yes,
+138672,7794,English League,2026-08-15T02:46:01+00:00,2026-08-15T03:04:15+00:00,1094,34,340,yes,
+138671,7794,English League,2026-08-15T02:27:39+00:00,2026-08-15T02:46:01+00:00,1102,34,340,yes,
+138670,7794,English League,2026-08-15T02:09:22+00:00,2026-08-15T02:27:38+00:00,1096,34,340,yes,
+138669,7794,English League,2026-08-15T01:51:09+00:00,2026-08-15T02:09:22+00:00,1092,34,340,yes,
+138668,7794,English League,2026-08-15T01:45:51+00:00,2026-08-15T01:51:09+00:00,318,34,340,yes,
+138667,7794,English League,2026-08-14T21:14:33+00:00,2026-08-14T21:34:48+00:00,1215,34,340,no,captured 34/38 matchdays; captured 340/380 matches
+138666,7794,English League,2026-08-14T20:54:05+00:00,2026-08-14T21:14:32+00:00,1227,34,340,no,captured 34/38 matchdays; captured 340/380 matches
+138644,7794,English League,2026-08-11T10:08:13+00:00,2026-08-11T10:08:15+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138643,7794,English League,2026-08-11T10:08:10+00:00,2026-08-11T10:08:12+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138642,7794,English League,2026-08-11T10:08:08+00:00,2026-08-11T10:08:10+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138641,7794,English League,2026-08-11T10:07:49+00:00,2026-08-11T10:08:07+00:00,18,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138640,7794,English League,2026-08-11T09:45:52+00:00,2026-08-11T10:07:48+00:00,1316,18,180,no,captured 18/38 matchdays; captured 180/380 matches
+138639,7794,English League,2026-08-11T09:21:56+00:00,2026-08-11T09:45:52+00:00,1435,28,280,no,captured 28/38 matchdays; captured 280/380 matches
+138638,7794,English League,2026-08-11T08:59:30+00:00,2026-08-11T09:21:56+00:00,1345,21,210,no,captured 21/38 matchdays; captured 210/380 matches
+138637,7794,English League,2026-08-11T08:38:28+00:00,2026-08-11T08:59:30+00:00,1261,32,320,no,captured 32/38 matchdays; captured 320/380 matches
+138636,7794,English League,2026-08-11T08:16:51+00:00,2026-08-11T08:38:28+00:00,1295,32,320,no,captured 32/38 matchdays; captured 320/380 matches
+138635,7794,English League,2026-08-10T17:06:12+00:00,,,0,0,no,
+138634,7794,English League,2026-08-10T16:45:58+00:00,2026-08-10T17:06:12+00:00,1213,34,340,no,captured 34/38 matchdays; captured 340/380 matches
+138633,7794,English League,2026-08-10T16:25:32+00:00,2026-08-10T16:45:58+00:00,1225,34,340,no,captured 34/38 matchdays; captured 340/380 matches
+138632,7794,English League,2026-08-10T16:05:11+00:00,2026-08-10T16:25:32+00:00,1220,34,340,no,captured 34/38 matchdays; captured 340/380 matches
+138631,7794,English League,2026-08-10T15:44:37+00:00,2026-08-10T16:05:11+00:00,1234,34,340,no,captured 34/38 matchdays; captured 340/380 matches
+138630,7794,English League,2026-08-10T15:24:13+00:00,2026-08-10T15:44:36+00:00,1226,34,340,no,captured 34/38 matchdays; captured 340/380 matches
+138629,7794,English League,2026-08-10T03:05:21+00:00,2026-08-10T15:21:45+00:00,44186,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138628,7794,English League,2026-08-10T03:05:18+00:00,2026-08-10T03:05:20+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138627,7794,English League,2026-08-10T02:58:47+00:00,2026-08-10T03:05:16+00:00,389,12,120,no,captured 12/38 matchdays; captured 120/380 matches
+138626,7794,English League,2026-08-10T02:38:22+00:00,2026-08-10T02:58:47+00:00,1224,34,340,no,captured 34/38 matchdays; captured 340/380 matches
+138623,7794,English League,2026-08-09T15:50:59+00:00,,,0,0,no,
+138622,7794,English League,2026-08-09T15:28:31+00:00,2026-08-09T15:50:59+00:00,1347,32,320,no,captured 32/38 matchdays; captured 320/380 matches
+138602,7794,English League,2026-08-06T11:09:44+00:00,2026-08-06T11:09:46+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138601,7794,English League,2026-08-06T11:09:42+00:00,2026-08-06T11:09:44+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138600,7794,English League,2026-08-06T11:09:39+00:00,2026-08-06T11:09:41+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138599,7794,English League,2026-08-06T09:43:00+00:00,2026-08-06T11:09:39+00:00,5205,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138598,7794,English League,2026-08-06T09:42:57+00:00,2026-08-06T09:42:59+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138597,7794,English League,2026-08-06T09:42:54+00:00,2026-08-06T09:42:57+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138596,7794,English League,2026-08-06T09:28:03+00:00,2026-08-06T09:42:54+00:00,890,26,185,no,captured 26/38 matchdays; captured 185/380 matches
+138595,7794,English League,2026-08-06T09:07:32+00:00,2026-08-06T09:28:03+00:00,1230,34,244,no,captured 34/38 matchdays; captured 244/380 matches
+138594,7794,English League,2026-08-06T08:46:49+00:00,2026-08-06T09:07:32+00:00,1242,34,242,no,captured 34/38 matchdays; captured 242/380 matches
+138587,7794,English League,2026-08-04T15:25:44+00:00,2026-08-04T15:25:46+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138586,7794,English League,2026-08-04T15:25:42+00:00,2026-08-04T15:25:43+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138585,7794,English League,2026-08-04T15:25:40+00:00,2026-08-04T15:25:41+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138584,7794,English League,2026-08-04T15:25:37+00:00,2026-08-04T15:25:39+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138583,7794,English League,2026-08-04T15:25:35+00:00,2026-08-04T15:25:37+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138582,7794,English League,2026-08-04T15:25:33+00:00,2026-08-04T15:25:35+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138581,7794,English League,2026-08-04T15:25:31+00:00,2026-08-04T15:25:33+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138580,7794,English League,2026-08-04T15:24:09+00:00,2026-08-04T15:25:31+00:00,81,2,14,no,captured 2/38 matchdays; captured 14/380 matches
+138579,7794,English League,2026-08-04T15:03:46+00:00,2026-08-04T15:24:09+00:00,1223,34,243,no,captured 34/38 matchdays; captured 243/380 matches
+138528,7794,English League,2026-07-28T14:52:16+00:00,2026-07-28T14:52:18+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138527,7794,English League,2026-07-28T14:52:14+00:00,2026-07-28T14:52:16+00:00,2,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138526,7794,English League,2026-07-28T14:52:12+00:00,2026-07-28T14:52:13+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138525,7794,English League,2026-07-28T14:52:10+00:00,2026-07-28T14:52:11+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138524,7794,English League,2026-07-28T14:52:07+00:00,2026-07-28T14:52:09+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138523,7794,English League,2026-07-28T14:52:05+00:00,2026-07-28T14:52:07+00:00,1,0,0,no,captured 0/38 matchdays; captured 0/380 matches
+138522,7794,English League,2026-07-28T14:35:31+00:00,2026-07-28T14:52:05+00:00,993,31,222,no,captured 31/38 matchdays; captured 222/380 matches
+138521,7794,English League,2026-07-28T14:14:57+00:00,2026-07-28T14:35:31+00:00,1234,34,243,no,captured 34/38 matchdays; captured 243/380 matches
+138520,7794,English League,2026-07-28T13:54:09+00:00,2026-07-28T14:14:57+00:00,1247,34,243,no,captured 34/38 matchdays; captured 243/380 matches
+138478,7794,English League,2026-07-22T16:36:24+00:00,2026-07-22T16:57:35+00:00,1270,34,340,no,not all matchdays were captured; not all matches were captured; standings were incomplete
+138477,7794,English League,2026-07-22T16:57:35+00:00,,,0,0,no,
+138471,7794,English League,2026-07-22T17:33:03+00:00,,,0,0,no,
+138470,7794,English League,2026-07-22T17:08:20+00:00,2026-07-22T17:33:03+00:00,1488,34,340,no,captured 34/38 matchdays; captured 340/380 matches
+138469,7794,English League,,,,0,0,no,
+138468,7794,English League,,,,0,0,no,
+138467,7794,English League,,,,0,0,no,
+138466,7794,English League,,,,0,0,no,
+138465,7794,English League,,,,0,0,no,
+138464,7794,English League,,,,0,0,no,
+138463,7794,English League,,,,0,0,no,
+138462,7794,English League,,,,0,0,no,

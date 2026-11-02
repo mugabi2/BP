@@ -233,7 +233,7 @@ def save_matchday_rows(conn, settings: Settings, rows: list[dict]) -> int:
     except PermissionError:
         logging.warning(
             "Could not refresh CSV because it is probably open in Excel. "
-            "Close match_results.csv and run python collect_virtuals.py export."
+            "Close match_results_master.csv and run python collect_virtuals.py export."
         )
     return changes
 
@@ -311,6 +311,7 @@ def extract_all_matchday_results(
             wait_for_matchday_content(page, matchday, settings.page_ready_timeout_ms)
             matchday_rows = extract_matchday_results(page, season_id, matchday, captured_at)
             rows.extend(matchday_rows)
+            log_captured_matches(season_id, matchday, matchday_rows)
             if on_matchday:
                 on_matchday(matchday_rows)
             if not matchday_rows:
@@ -339,6 +340,19 @@ def existing_matchday_rows(conn, season_id: str, matchday: int) -> list[dict]:
         (season_id, matchday),
     ).fetchall()
     return [dict(row) for row in existing_rows]
+
+
+def log_captured_matches(season_id: str, matchday: int, rows: list[dict]) -> None:
+    for row in rows:
+        logging.info(
+            "Captured S%s MD%02d %s-%s FT %s-%s",
+            season_id,
+            matchday,
+            row["home_team"],
+            row["away_team"],
+            row["fulltime_home_goals"],
+            row["fulltime_away_goals"],
+        )
 
 
 def extract_matchday_results(
