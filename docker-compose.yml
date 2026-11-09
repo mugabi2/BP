@@ -92,18 +92,20 @@ services:
     ports:
       - "127.0.0.1:${MLFLOW_PORT:-5000}:5000"
     environment:
-      MLFLOW_BACKEND_STORE_URI: postgresql+psycopg2://${POSTGRES_USER:-bp_user}:${POSTGRES_PASSWORD}@postgres:5432/mlflow_app
+      POSTGRES_USER: ${POSTGRES_USER:-bp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       MLFLOW_ARTIFACTS_DESTINATION: /mlflow/artifacts
       MLFLOW_SERVER_ALLOWED_HOSTS: "localhost:*,127.0.0.1:*,mlflow:5000"
     command:
       - sh
       - -lc
       - >
+        encoded_password="$$(python -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ[\"POSTGRES_PASSWORD\"], safe=\"\"))')" &&
         mlflow server
         --host 0.0.0.0
         --port 5000
         --workers 1
-        --backend-store-uri "$$MLFLOW_BACKEND_STORE_URI"
+        --backend-store-uri "postgresql+psycopg2://$${POSTGRES_USER}:$${encoded_password}@postgres:5432/mlflow_app"
         --artifacts-destination "$$MLFLOW_ARTIFACTS_DESTINATION"
         --allowed-hosts "$$MLFLOW_SERVER_ALLOWED_HOSTS"
     volumes:
@@ -116,7 +118,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 45s
-
   collector:
     build:
       context: .
