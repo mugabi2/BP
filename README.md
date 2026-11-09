@@ -44,6 +44,50 @@ Each prediction run updates the single live predictions file:
 
 - `outputs/btts_predictions_live.csv`
 
+## Train the BTTS model (`notebooks/01_btts_model_training.ipynb`)
+
+The training notebook supports two historical data sources via `src/training_data.py` and logs experiment runs via `src/mlflow_tracking.py`:
+
+```text
+Historical data (CSV or VPS PostgreSQL)
+      ↓
+Laptop notebook (notebooks/01_btts_model_training.ipynb)
+      ↓
+Existing BTTS training + candidate model comparison
+      ↓
+Local model files (models/btts_model.joblib + models/btts_feature_columns.json)
+      ↓
+MLflow tracking (optional / non-blocking)
+```
+
+### Mode B — Local CSV training (works offline / without VPS)
+
+Set in `.env` or your shell before launching Jupyter:
+
+```powershell
+$env:TRAINING_DATA_SOURCE="csv"
+$env:MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
+```
+
+- Loads historical match results from `Match day results/match_results.csv`.
+- Trains all 6 candidate models using the `feature_cutoff_matchday = target_matchday - 2` rule.
+- Always writes `models/btts_model.joblib` and `models/btts_feature_columns.json` for local Streamlit inference.
+- If `MLFLOW_TRACKING_URI` cannot be reached, the notebook emits a clear warning and finishes normally.
+
+### Mode A — VPS PostgreSQL + VPS MLflow (via SSH tunnel)
+
+When VPS access is available, open an SSH tunnel from your laptop to the VPS and set:
+
+```powershell
+$env:TRAINING_DATA_SOURCE="postgres"
+$env:DATABASE_URL="postgresql://bp_user:YOUR_POSTGRES_PASSWORD@127.0.0.1:5433/bp"
+$env:MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
+$env:MLFLOW_EXPERIMENT_NAME="BTTS Prediction"
+$env:MLFLOW_REGISTERED_MODEL_NAME="btts-predictor"
+```
+
+See `VPS_DEPLOYMENT.md` for the exact SSH tunnel and verification commands.
+
 ## Collect historical virtual results
 
 ```powershell

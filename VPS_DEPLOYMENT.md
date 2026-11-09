@@ -199,3 +199,63 @@ MLFLOW_TRACKING_URI=http://127.0.0.1:5000
 ```
 
 MLflow is intentionally not used for live inference. The working Streamlit app and local `models/btts_model.joblib` remain unchanged at this stage.
+
+## Laptop Training With VPS PostgreSQL + VPS MLflow
+
+When VPS access is available, the training workflow is:
+
+```text
+VPS PostgreSQL (match_results)
+      ↓
+SSH tunnel / secure connection
+      ↓
+Laptop notebook (notebooks/01_btts_model_training.ipynb)
+      ↓
+Train locally + save models/btts_model.joblib & models/btts_feature_columns.json
+      ↓
+MLflow on VPS (experiment: BTTS Prediction, model: btts-predictor)
+```
+
+PostgreSQL is never exposed publicly on `0.0.0.0`.
+
+### Step 1 — Get the internal Docker IP of the PostgreSQL container on the VPS
+
+On the VPS:
+
+```bash
+cd /opt/bp
+PG_CONTAINER_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q postgres)")
+echo "$PG_CONTAINER_IP"
+```
+
+### Step 2 — Open an SSH tunnel from your laptop
+
+From PowerShell or terminal on your laptop, forward local port `5433` (or `5432`) to the PostgreSQL container IP on the VPS, and local port `5000` to the VPS loopback MLflow port:
+
+```powershell
+ssh -L 5433:<PG_CONTAINER_IP>:5432 -L 5000:127.0.0.1:5000 YOUR_VPS_USER@YOUR_VPS_IP
+```
+
+Keep this SSH session open while running the notebook.
+
+### Step 3 — Configure laptop environment variables
+
+In your laptop `.env` (never committed) or PowerShell session before starting Jupyter:
+
+```powershell
+$env:TRAINING_DATA_SOURCE="postgres"
+$env:DATABASE_URL="postgresql://bp_user:YOUR_POSTGRES_PASSWORD@127.0.0.1:5433/bp"
+$env:MLFLOW_TRACKING_URI="http://127.0.0.1:5000"
+$env:MLFLOW_EXPERIMENT_NAME="BTTS Prediction"
+$env:MLFLOW_REGISTERED_MODEL_NAME="btts-predictor"
+```
+
+*(If your local port `5432` is free, you can tunnel `-L 5432:<PG_CONTAINER_IP>:5432` and use `127.0.0.1:5432` in `DATABASE_URL`, or set `TRAINING_DATABASE_URL` specifically for the notebook.)*
+
+### Step 4 — Run `notebooks/01_btts_model_training.ipynb`
+
+1. Run all cells in `notebooks/01_btts_model_training.ipynb`.
+2. Verify Cell 6 prints `Training data source: postgres` and the row/season count from `match_results`.
+3. Verify Cell 24 saves `models/btts_model.joblib` and `models/btts_feature_columns.json` locally and prints `MLflow tracking status: logged`.
+4. Open `http://127.0.0.1:5000` in your browser to inspect the `BTTS Prediction` experiment, candidate runs, threshold evaluation artifacts, and the registered `btts-predictor` model versions.
+5. When offline or when the VPS is unreachable, switch back to `TRAINING_DATA_SOURCE=csv` to train from `Match day results/match_results.csv`.
