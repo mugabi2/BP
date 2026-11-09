@@ -117,3 +117,16 @@ Data source database: bp
 ```
 
 Metabase application metadata is stored separately in `metabase_app`.
+
+## MLflow
+
+The VPS Docker stack includes an MLflow Tracking Server for centralized experiment and model tracking.
+
+- Tracking metadata database: `mlflow_app`
+- Artifact storage: persistent Docker volume `mlflow_artifacts`
+- VPS binding: `127.0.0.1:5000` by default
+- Recommended access: SSH tunnel from the laptop
+
+MLflow is not in the live prediction path. Streamlit continues to load the local `models/btts_model.joblib` model.
+
+See `VPS_DEPLOYMENT.md` for deployment and access commands.

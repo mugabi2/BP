@@ -140,3 +140,62 @@ SSL: off
 Metabase stores its own users, questions, and dashboards in a separate PostgreSQL database named `metabase_app`. BetPawa match data remains in `bp`.
 
 If port 3000 is blocked by the VPS firewall, allow TCP 3000 temporarily and then reload the page. Once Metabase is working, prefer putting it behind HTTPS/reverse proxy rather than leaving a raw public port as the permanent setup.
+
+## MLflow
+
+The Docker stack also runs an MLflow Tracking Server for centralized model experiment and version tracking.
+
+MLflow uses:
+
+- PostgreSQL database `mlflow_app` for tracking metadata.
+- Docker volume `mlflow_artifacts` for model and run artifacts.
+- Host port `5000`, bound to `127.0.0.1` on the VPS only.
+
+The BP business data remains in the separate `bp` database.
+
+Start or update the stack:
+
+```bash
+cd /opt/bp
+git pull
+docker compose up -d --build
+```
+
+Check MLflow:
+
+```bash
+docker compose ps
+docker compose logs --tail=100 mlflow
+curl http://127.0.0.1:5000/health
+curl http://127.0.0.1:5000/version
+```
+
+The health endpoint should return:
+
+```text
+OK
+```
+
+### Open the MLflow UI safely from your laptop
+
+Do not open port 5000 in UFW or the VPS provider firewall.
+
+From a terminal on your laptop, create an SSH tunnel:
+
+```bash
+ssh -L 5000:127.0.0.1:5000 YOUR_VPS_USER@YOUR_VPS_IP
+```
+
+Keep that SSH session open, then browse to:
+
+```text
+http://127.0.0.1:5000
+```
+
+The same tunnel will later let the local training notebook log runs to the VPS MLflow server with:
+
+```text
+MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+```
+
+MLflow is intentionally not used for live inference. The working Streamlit app and local `models/btts_model.joblib` remain unchanged at this stage.
