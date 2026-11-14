@@ -100,7 +100,7 @@ services:
       - sh
       - -lc
       - >
-        encoded_password="$$(python -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ[\"POSTGRES_PASSWORD\"], safe=\"\"))')" &&
+        encoded_password="$$(python -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["POSTGRES_PASSWORD"], safe=""))')" &&
         mlflow server
         --host 0.0.0.0
         --port 5000
