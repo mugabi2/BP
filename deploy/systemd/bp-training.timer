@@ -1,0 +1,11 @@
+[Unit]
+Description=Run BP BTTS model training every Sunday
+
+[Timer]
+OnCalendar=Sun *-*-* 02:00:00 Africa/Kampala
+Persistent=true
+RandomizedDelaySec=10m
+Unit=bp-training.service
+
+[Install]
+WantedBy=timers.target

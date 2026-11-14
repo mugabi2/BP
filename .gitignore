@@ -1,4 +1,9 @@
 .venv/
+env_bp/
+node_modules/
+.tmp_skill_build/
+.ipynb_checkpoints/
+.model-download/
 __pycache__/
 *.pyc
 .env
@@ -6,3 +11,5 @@ auth/browser-profile/
 data/*.sqlite
 exports/*.csv
 logs/*.log
+training-output/
+models/backups/

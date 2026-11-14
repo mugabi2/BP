@@ -1,0 +1,15 @@
+[Unit]
+Description=BP weekly BTTS model training
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/bp/docker-compose.yml
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/bp
+ExecStart=/usr/bin/flock -n -E 75 /run/lock/bp-training.lock /usr/bin/docker compose --profile training run --rm trainer
+SuccessExitStatus=75
+TimeoutStartSec=12h
+Nice=10
+

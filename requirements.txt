@@ -3,9 +3,9 @@ python-dotenv==1.0.1
 streamlit
 pandas
 numpy
-joblib
-scikit-learn
+joblib==1.5.3
+scikit-learn==1.9.0
 pillow
 pytesseract
-psycopg[binary]>=3.1,<4
-mlflow
+psycopg[binary]==3.2.13
+mlflow==3.13.0

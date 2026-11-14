@@ -174,3 +174,29 @@ The VPS Docker stack includes an MLflow Tracking Server for centralized experime
 MLflow is not in the live prediction path. Streamlit continues to load the local `models/btts_model.joblib` model.
 
 See `VPS_DEPLOYMENT.md` for deployment and access commands.
+
+## Automated VPS training
+
+The optional `trainer` Compose profile runs the same feature engineering,
+six-model comparison, winner selection, Pick/Skip evaluation, and MLflow
+logging without requiring a laptop or Jupyter session:
+
+```bash
+docker compose --profile training build trainer
+docker compose --profile training run --rm trainer
+```
+
+The trainer reads PostgreSQL over Docker's private network and writes a
+candidate bundle to `training-output/latest-candidate/`. It does not replace
+the working Streamlit model automatically. After reviewing the run and model
+version in MLflow, promote the approved bundle on Windows with:
+
+```powershell
+.\scripts\fetch_vps_model.ps1 `
+  -VpsHost root@YOUR_VPS_IP `
+  -Approve
+```
+
+The script backs up the current local model before copying the approved
+`btts_model.joblib` and `btts_feature_columns.json` into `models/`. See
+`VPS_DEPLOYMENT.md` for the weekly systemd timer setup.

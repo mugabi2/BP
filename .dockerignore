@@ -1,5 +1,9 @@
 .git
 .venv
+env_bp
+node_modules
+.tmp_skill_build
+.ipynb_checkpoints
 .env
 __pycache__
 *.pyc
@@ -7,8 +11,12 @@ auth
 data
 exports
 logs
-odds
+odds/*
+!odds/final_odds/
+odds/final_odds/*
+!odds/final_odds/final_odds.csv
 outputs
 models
 notebooks
 Match day results
+training-output

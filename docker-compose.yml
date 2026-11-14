@@ -143,6 +143,35 @@ services:
       - ./data:/app/data
     stop_grace_period: 30s
 
+  trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.trainer
+    profiles: ["training"]
+    restart: "no"
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    environment:
+      TRAINING_DATA_SOURCE: postgres
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-bp_user}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGDATABASE: ${POSTGRES_DB:-bp}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: ${MLFLOW_EXPERIMENT_NAME:-BTTS Prediction}
+      MLFLOW_REGISTERED_MODEL_NAME: ${MLFLOW_REGISTERED_MODEL_NAME:-btts-predictor}
+      TRAINING_ODDS_PATH: /app/odds/final_odds/final_odds.csv
+      TRAINING_OUTPUT_DIR: /app/training-output/latest-candidate
+      TRAINING_USE_DATABASE_LOCK: "true"
+    volumes:
+      - ./training-output:/app/training-output
+    command: ["python", "-m", "src.train_btts"]
+
 volumes:
   bp_postgres_data:
   mlflow_artifacts:

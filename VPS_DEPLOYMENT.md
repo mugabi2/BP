@@ -259,3 +259,81 @@ $env:MLFLOW_REGISTERED_MODEL_NAME="btts-predictor"
 3. Verify Cell 24 saves `models/btts_model.joblib` and `models/btts_feature_columns.json` locally and prints `MLflow tracking status: logged`.
 4. Open `http://127.0.0.1:5000` in your browser to inspect the `BTTS Prediction` experiment, candidate runs, threshold evaluation artifacts, and the registered `btts-predictor` model versions.
 5. When offline or when the VPS is unreachable, switch back to `TRAINING_DATA_SOURCE=csv` to train from `Match day results/match_results.csv`.
+
+## Automated VPS training
+
+The `trainer` Compose profile runs the existing BTTS training pipeline inside
+the VPS Docker network. It reads `match_results` from PostgreSQL, logs runs to
+MLflow, and writes a candidate bundle without replacing any production model.
+
+### Build and run once
+
+On the VPS:
+
+```bash
+cd /opt/bp
+mkdir -p training-output
+docker compose --profile training build trainer
+docker compose --profile training run --rm trainer
+```
+
+The candidate files are written to:
+
+```text
+/opt/bp/training-output/latest-candidate/
+```
+
+Expected files include:
+
+```text
+btts_model.joblib
+btts_feature_columns.json
+model_comparison.csv
+threshold_evaluation.csv
+feature_summary.csv
+training_summary.json
+```
+
+The trainer holds the collector advisory lock for the complete run so it gets
+a consistent snapshot and cannot overlap the collector or another trainer.
+Candidate model and report files are each replaced atomically, and nothing is
+promoted into the working Streamlit model automatically.
+
+### Enable weekly unattended training
+
+The provided systemd timer runs every Sunday at 2:00 AM Africa/Kampala time:
+
+```bash
+cd /opt/bp
+cp deploy/systemd/bp-training.service /etc/systemd/system/
+cp deploy/systemd/bp-training.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now bp-training.timer
+systemctl list-timers bp-training.timer
+```
+
+Run or inspect it manually with:
+
+```bash
+systemctl start bp-training.service
+journalctl -u bp-training.service -f
+```
+
+The timer treats an already-running training lock as a clean skip. PostgreSQL,
+MLflow, and the trainer remain private; the trainer publishes no network ports.
+
+### Promote an approved model to the laptop
+
+Review the experiment and registered model in MLflow first. Then, from the BP
+repository on Windows:
+
+```powershell
+.\scripts\fetch_vps_model.ps1 `
+  -VpsHost root@YOUR_VPS_IP `
+  -Approve
+```
+
+The script downloads the candidate over SSH, validates the feature-columns
+JSON, backs up the current local model, and copies the approved files into
+`models/`. Streamlit continues to load the local files; it never downloads or
+promotes an MLflow model automatically.

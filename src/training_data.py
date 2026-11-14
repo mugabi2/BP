@@ -79,10 +79,16 @@ def resolve_training_data_config(
         or None
     )
 
-    if normalized_source == "postgres" and not resolved_db_url:
+    libpq_env_ready = all(
+        (os.getenv(name) or "").strip()
+        for name in ("PGHOST", "PGUSER", "PGDATABASE")
+    )
+
+    if normalized_source == "postgres" and not resolved_db_url and not libpq_env_ready:
         raise ValueError(
             "DATABASE_URL is required when TRAINING_DATA_SOURCE=postgres. "
-            "Set DATABASE_URL in your environment or .env, or set TRAINING_DATA_SOURCE=csv."
+            "Set DATABASE_URL (or PGHOST, PGUSER, and PGDATABASE) in your "
+            "environment, or set TRAINING_DATA_SOURCE=csv."
         )
 
     return TrainingDataConfig(
@@ -143,10 +149,7 @@ def load_results_from_csv(csv_path: Path | str = DEFAULT_RESULTS_CSV_PATH) -> pd
     return normalize_results_dataframe(raw_df)
 
 
-def load_results_from_postgres(database_url: str) -> pd.DataFrame:
-    if not database_url:
-        raise ValueError("A PostgreSQL connection string (DATABASE_URL) is required.")
-
+def load_results_from_postgres(database_url: str | None = None) -> pd.DataFrame:
     query = """
         SELECT
             season_id,
@@ -171,7 +174,10 @@ def load_results_from_postgres(database_url: str) -> pd.DataFrame:
             "Install it with: pip install 'psycopg[binary]>=3.1,<4'"
         ) from exc
 
-    with psycopg.connect(database_url, row_factory=dict_row) as conn:
+    # An empty conninfo makes psycopg use the standard PGHOST/PGPORT/PGUSER/
+    # PGPASSWORD/PGDATABASE environment variables. This avoids embedding
+    # passwords in a URI inside the VPS trainer container.
+    with psycopg.connect(database_url or "", row_factory=dict_row) as conn:
         rows = conn.execute(query).fetchall()
 
     raw_df = pd.DataFrame(rows, columns=MATCH_RESULT_COLUMNS)
@@ -189,7 +195,6 @@ def load_training_results(
         database_url=database_url,
     )
     if config.source == "postgres":
-        assert config.database_url is not None
         df = load_results_from_postgres(config.database_url)
     else:
         df = load_results_from_csv(config.csv_path)
