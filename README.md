@@ -11,8 +11,10 @@ Odds-to-season matching remains a known limitation, deferred to Iteration 2.
 
 ### Train, compare and deploy
 
-1. Pull this repository and open `notebooks/01_btts_model_training.ipynb`.
-2. Run all notebook cells using the same results and odds CSVs as V1.
+1. Pull this repository and open `notebooks/01_btts_model_training.ipynb`, or
+   run `python scripts/execute_notebook_with_progress.py` for cell-by-cell timing
+   without Jupyter kernel startup overhead.
+2. Train using the same results and odds CSVs as V1.
 3. Compare the candidate validation accuracy, AUC, Brier, Yes/No recall
    and pick ROI with the V1 metrics. Do not promote solely for higher accuracy.
 4. The notebook writes `models/btts_model_iteration1.joblib` and
@@ -24,7 +26,40 @@ Odds-to-season matching remains a known limitation, deferred to Iteration 2.
    on the same machine; when unavailable the app can use current-season data
    but cross-season features will be missing.
 
-To run feature regression tests: `python -m pytest -q tests/test_iteration1_features.py`.
+To run the regression tests:
+
+```powershell
+python -m unittest tests.test_base_features tests.test_iteration1_features tests.test_mlflow_tracking -v
+```
+
+### November 26, 2026 validation result
+
+The verified Iteration 1 run used 64,142 raw matches, 281 seasons, 48,040
+training rows, 12,011 validation rows and **175 model features**. The new
+feature families are present in the saved metadata; the earlier 64-feature
+notebook output was stale.
+
+| Benchmark | Accuracy | ROC AUC | Brier (lower is better) |
+|---|---:|---:|---:|
+| Same-data V1 / 64-feature benchmark | 58.804% | 0.572253 | 0.239923 |
+| Iteration 1 / 175 features | 58.746% | 0.567514 | 0.240104 |
+| Market probability | 58.843% | 0.577472 | 0.239347 |
+
+Iteration 1 therefore did **not** improve the fair same-data benchmark and is
+not promoted. It remains a candidate artifact. Its 0.65 confidence threshold
+selected 1,611 matches (13.4% coverage) at 67.6% hit rate, but the available
+odds produced -5.24% ROI, so hit rate alone is not a promotion signal.
+
+The notebook saves diagnostics, including the correlation heatmap, under
+`docs/model_diagnostics/` and attempts to log the parent run, all candidates,
+diagnostics and selected model to MLflow. If training completed while the SSH
+tunnel was closed, reopen the tunnel and replay the saved result without
+retraining:
+
+```powershell
+$env:MLFLOW_TRACKING_URI="http://127.0.0.1:5002"
+python scripts/log_iteration1_artifacts_to_mlflow.py
+```
 
 **Deployment note:** `git pull` only updates code. It does not retrain,
 promote or restart a model. The historical odds mapping remains unchanged.
