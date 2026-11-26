@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from joblib import load
+from src.iteration1_features import add_iteration1_features
 
 try:
     from sklearn.exceptions import InconsistentVersionWarning
@@ -70,7 +71,8 @@ ODDS_DERIVED_COLUMNS = [
     "market_btts_yes_prob_norm",
     "market_btts_no_prob_norm",
 ]
-ODDS_FEATURE_COLUMNS = ODDS_RAW_COLUMNS + ODDS_DERIVED_COLUMNS
+OVER_UNDER_COLUMNS = ["ou_over_1_5", "ou_under_1_5", "ou_over_2_5", "ou_under_2_5", "ou_over_3_5", "ou_under_3_5"]
+ODDS_FEATURE_COLUMNS = ODDS_RAW_COLUMNS + ODDS_DERIVED_COLUMNS + OVER_UNDER_COLUMNS
 
 TEAM_STATS_COLUMNS = [
     "rank",
@@ -224,6 +226,10 @@ def load_odds(path_text: str) -> pd.DataFrame:
     if "captured_at" in df.columns:
         df = df.sort_values("captured_at")
     df = df.drop_duplicates(["matchday", "home_team", "away_team"], keep="last")
+    for col in OVER_UNDER_COLUMNS:
+        if col not in df.columns:
+            df[col] = np.nan
+        df[col] = pd.to_numeric(df[col], errors="coerce")
     return add_implied_odds_features(df)
 
 
@@ -428,21 +434,21 @@ def merge_fixture_odds(fixtures: pd.DataFrame, odds_file: pd.DataFrame, btts_tex
     if fixtures.empty:
         return fixtures
 
-    for col in ODDS_RAW_COLUMNS:
+    for col in ODDS_RAW_COLUMNS + OVER_UNDER_COLUMNS:
         if col not in fixtures.columns:
             fixtures[col] = np.nan
 
     if not odds_file.empty:
         latest_by_fixture = odds_file.sort_values("matchday").drop_duplicates(["home_team", "away_team"], keep="last")
         fixture_keys = ["home_team", "away_team"]
-        file_cols = fixture_keys + [col for col in ODDS_RAW_COLUMNS if col in latest_by_fixture.columns]
+        file_cols = fixture_keys + [col for col in ODDS_RAW_COLUMNS + OVER_UNDER_COLUMNS if col in latest_by_fixture.columns]
         fixtures = fixtures.merge(
             latest_by_fixture[file_cols],
             on=fixture_keys,
             how="left",
             suffixes=("", "_file"),
         )
-        for col in ODDS_RAW_COLUMNS:
+        for col in ODDS_RAW_COLUMNS + OVER_UNDER_COLUMNS:
             file_col = f"{col}_file"
             if file_col in fixtures.columns:
                 fixtures[col] = fixtures[col].combine_first(fixtures[file_col])
@@ -1668,6 +1674,11 @@ def main() -> None:
                 live_gap_matchdays,
                 bundle,
             )
+            # Iteration 1 uses existing historical master data; collector is unchanged.
+            history_path = PROJECT_ROOT / "data" / "match_day_results" / "match_results_master.csv"
+            historical = load_results_csv(str(history_path)) if history_path.exists() else results
+            combined_history = pd.concat([historical, results], ignore_index=True)
+            manual_live_df = add_iteration1_features(manual_live_df, combined_history)
             show_manual_input_verification(
                 manual_live_df,
                 feature_columns,
