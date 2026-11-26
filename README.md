@@ -1,3 +1,36 @@
+## BTTS Improvement Iteration 1 (feature engineering only)
+
+Iteration 1 adds shared historical features in `src/iteration1_features.py`:
+team identities, historical head-to-head BTTS and scoring, home/away form,
+recent 5/10-match goals, previous 5/10/20-season BTTS/scoring,
+and existing Over/Under odds. The model's BTTS target and
+`target_matchday - 2` results cutoff are unchanged.
+
+**No odds/result collection, database schema, or odds fixture mapping change.**
+Odds-to-season matching remains a known limitation, deferred to Iteration 2.
+
+### Train, compare and deploy
+
+1. Pull this repository and open `notebooks/01_btts_model_training.ipynb`.
+2. Run all notebook cells using the same results and odds CSVs as V1.
+3. Compare the candidate validation accuracy, AUC, Brier, Yes/No recall
+   and pick ROI with the V1 metrics. Do not promote solely for higher accuracy.
+4. The notebook writes `models/btts_model_iteration1.joblib` and
+   `models/btts_feature_columns_iteration1.json`, preserving V1.
+5. Only when satisfied with validation, run
+   `python scripts/promote_iteration1.py` and restart Streamlit.
+   The script backs up the original live model and metadata once.
+6. Live predictions need `data/match_day_results/match_results_master.csv`
+   on the same machine; when unavailable the app can use current-season data
+   but cross-season features will be missing.
+
+To run feature regression tests: `python -m pytest -q tests/test_iteration1_features.py`.
+
+**Deployment note:** `git pull` only updates code. It does not retrain,
+promote or restart a model. The historical odds mapping remains unchanged.
+
+---
+
 # betPawa Virtuals Dataset Collector
 
 This project collects betPawa Virtual English League table data for study purposes.
