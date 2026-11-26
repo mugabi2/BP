@@ -5,5 +5,7 @@ pandas
 numpy
 joblib
 scikit-learn
+matplotlib
+mlflow==3.13.0
 pillow
 pytesseract

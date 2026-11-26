@@ -1,0 +1,21 @@
+{
+  "training_rows": 48040,
+  "validation_rows": 12011,
+  "seasons": 281,
+  "number_of_features": 175,
+  "selected_model_name": "HistGradientBoostingClassifier",
+  "selected_metrics": {
+    "model": "HistGradientBoostingClassifier",
+    "accuracy": 0.5874614936308384,
+    "roc_auc": 0.5675138822519973,
+    "brier_score": 0.24010356722929643
+  },
+  "mlflow": {
+    "logged": false,
+    "tracking_uri": "http://127.0.0.1:5002",
+    "experiment_name": "BTTS Prediction",
+    "registered_model_name": "btts-predictor",
+    "training_timestamp": "2026-11-26T12:54:53+00:00",
+    "reason": "Cannot reach MLflow at http://127.0.0.1:5002 (URLError: <urlopen error [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions>)"
+  }
+}
